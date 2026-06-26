@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: "kern";
+  }
+  ::selection {
+    @apply bg-teal/20;
+  }
+  /* subtle paper grain via layered radial gradients */
+  .paper-bg {
+    background-color: #f0e7d5;
+    background-image:
+      radial-gradient(circle at 18% 12%, rgba(194, 168, 131, 0.16), transparent 42%),
+      radial-gradient(circle at 84% 78%, rgba(21, 98, 92, 0.07), transparent 46%);
+  }
+}
+
+@layer components {
+  .frame {
+    @apply mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-6;
+  }
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full
+      px-6 py-3.5 text-base font-bold transition active:scale-[0.98]
+      disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-teal text-paper shadow-lift hover:bg-teal-deep;
+  }
+  .btn-ghost {
+    @apply btn border border-tan/70 bg-transparent text-ink hover:bg-tan/15;
+  }
+  .btn-dark {
+    @apply btn bg-ink text-paper hover:bg-espresso;
+  }
+  .field {
+    @apply w-full rounded-2xl border border-tan/60 bg-white/60 px-4 py-3 text-ink
+      placeholder:text-ink/35 outline-none transition
+      focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-semibold text-ink/80;
+  }
+  .card {
+    @apply rounded-card border border-tan/40 bg-[#FBF7EC] shadow-card;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-tan/60
+      bg-white/50 px-3 py-1 text-xs font-medium text-espresso;
+  }
+  .serif {
+    @apply font-serif italic;
+  }
+}
