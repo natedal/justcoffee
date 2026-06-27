@@ -1,5 +1,6 @@
 import { currentUserId, unauthorized } from "@/lib/auth";
 import * as db from "@/lib/db";
+import { publish } from "@/lib/events";
 
 function ensureParticipant(matchId: string, uid: string) {
   const m = db.getMatch(matchId);
@@ -50,12 +51,25 @@ export async function POST(
   }
   if (!body) return Response.json({ error: "empty message" }, { status: 400 });
 
+  const now = Date.now();
   db.addMessage({
     id: db.id("msg"),
     matchId: id,
     fromId: uid,
     body,
-    at: Date.now(),
+    at: now,
   });
+
+  // Push the new message to the other participant in real time.
+  const otherId = m.aId === uid ? m.bId : m.aId;
+  const sender = db.getUser(uid);
+  publish(otherId, {
+    type: "message",
+    matchId: id,
+    fromName: sender?.name ?? "your match",
+    preview: body.slice(0, 120),
+    at: now,
+  });
+
   return Response.json({ messages: serialize(id, uid) });
 }

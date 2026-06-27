@@ -24,6 +24,8 @@ export interface Avatar {
 
 export interface User {
   id: string;
+  // Verified contact — used for magic-link sign-in. Never shown to other users.
+  email?: string;
   // Real identity — revealed ONLY after a mutual match.
   name: string;
   age: number;
@@ -32,6 +34,9 @@ export interface User {
   iAm: string; // "I'm a ___"
   lookingTo: string; // "I'm looking to ___"
   avatar: Avatar;
+  // Optional real photo (revealed ONLY after a mutual match, blurred before).
+  photoUrl?: string;
+  verified?: boolean; // completed the lightweight photo-verification step
   // Location
   city: string; // city key (see lib/cities)
   lat: number;

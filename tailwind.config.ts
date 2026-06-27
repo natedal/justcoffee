@@ -51,6 +51,22 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "page-in": {
+          "0%": { opacity: "0", transform: "translateY(10px) scale(0.992)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        "scale-in": {
+          "0%": { opacity: "0", transform: "scale(0.96)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "sheet-up": {
+          "0%": { opacity: "0", transform: "translateY(16px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         "pulse-ring": {
           "0%": { transform: "scale(0.95)", opacity: "0.6" },
           "70%": { transform: "scale(1.25)", opacity: "0" },
@@ -60,6 +76,10 @@ const config: Config = {
       animation: {
         steam: "steam 2.6s ease-in-out infinite",
         "fade-up": "fade-up 0.45s ease-out both",
+        "fade-in": "fade-in 0.3s ease-out both",
+        "page-in": "page-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "scale-in": "scale-in 0.3s ease-out both",
+        "sheet-up": "sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both",
         "pulse-ring": "pulse-ring 1.8s ease-out infinite",
       },
     },

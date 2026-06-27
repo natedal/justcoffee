@@ -9,6 +9,7 @@ import type {
   Message,
   Report,
   Block,
+  CoffeeSpot,
 } from "./types";
 import { COFFEE_SPOTS } from "./cities";
 import { buildSeedUsers } from "./seed";
@@ -88,6 +89,10 @@ export function getUser(userId: string): User | undefined {
 }
 export function allUsers(): User[] {
   return Object.values(db().users);
+}
+export function getUserByEmail(email: string): User | undefined {
+  const target = email.trim().toLowerCase();
+  return Object.values(db().users).find((u) => u.email === target);
 }
 export function upsertUser(u: User): User {
   db().users[u.id] = u;
@@ -195,4 +200,13 @@ export function getSpot(spotId: string) {
 }
 export function spotsInCity(city: string) {
   return db().spots.filter((s) => s.city === city);
+}
+/** Persist a (possibly generated) spot so it resolves on later reads. */
+export function addSpot(spot: CoffeeSpot): CoffeeSpot {
+  const d = db();
+  const existing = d.spots.find((s) => s.id === spot.id);
+  if (existing) return existing;
+  d.spots.push(spot);
+  save();
+  return spot;
 }

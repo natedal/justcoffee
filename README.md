@@ -32,17 +32,25 @@ This repo is a working MVP of that product.
 
 ## The core loop
 
-1. **Onboarding** — first name, age, an avatar, two sentences ("I'm a…" /
-   "I'm looking to…"), when you're free, and where you are (city or device GPS).
-2. **The challenge dial** — before each search, choose how far outside your bubble
-   to go, from *"someone like me"* to *"someone I'd never normally meet."*
+0. **Sign in** — a passwordless **magic link**. Enter your email and tap the link
+   to start a session (with no email provider configured, the link is surfaced
+   on screen so the flow works locally).
+1. **Onboarding** — first name, age, an avatar **or a real photo (with an
+   optional verification badge)**, two sentences ("I'm a…" / "I'm looking to…"),
+   and where you are (city or device GPS). Your card is **editable any time**.
+2. **Before each search** — pick **when you're free** (next 2 hrs / today / this
+   weekend) and set the **challenge dial**: how far outside your bubble to go,
+   from *"someone like me"* to *"someone I'd never normally meet."*
 3. **Find someone** — the matcher returns one nearby person: a **blurred** avatar,
    a pseudonym, their two sentences, and a "why you two" note.
 4. **Meet them / keep looking** — one person at a time. No stack, no gamification.
 5. **Mutual reveal** — when both say yes, names and photos unlock, plus a suggested
-   **public** coffee spot near the midpoint.
+   **public** coffee spot that's genuinely walkable from the midpoint (it falls
+   back to a neighborhood cafe at the midpoint rather than sending you across town).
 6. **Plan it** — messaging unlocks *only* after a mutual match, and is nudged toward
-   logistics. Matches expire after 24h if you don't coordinate.
+   logistics. Chat is **realtime** (Server-Sent Events, no polling) and a new match
+   or message raises a live notification anywhere in the app. Matches expire after
+   24h if you don't coordinate.
 7. **Did you meet?** — a lightweight post-coffee prompt that closes the loop.
 
 **Safety throughout:** block & report are available *before* the reveal, the app
@@ -86,7 +94,9 @@ no key, the built-in rationale is used and the product is identical.
 | Framework | Next.js 15 (App Router) + React 19 + TypeScript |
 | Styling | Tailwind CSS, with the campaign's palette + Helvetica Neue / Georgia |
 | Data | A file-backed JSON store (`lib/db.ts`) behind a small repository API |
-| Auth | Signed-cookie session (no passwords for the MVP) |
+| Auth | Passwordless **magic link** (`lib/magic.ts`) → signed-cookie session |
+| Realtime | In-process pub/sub (`lib/events.ts`) streamed over SSE (`/api/stream`) |
+| Photos | Local upload (`lib/uploads.ts`), served auth-gated; blurred until reveal |
 | Matching | Deterministic engine in `lib/matching.ts` (+ optional Claude) |
 
 The store is deliberately swappable: every call site uses the helpers in
@@ -110,7 +120,9 @@ On first boot the store seeds ~16 demo people (Austin-dense, mirroring the
 go-to-market plan) so the matching loop is real with a single live user. Demo
 people respond to a "meet them" with a stable yes/no, so mutual matches *and*
 "keep looking" both happen. To experience a real two-sided match, open a second
-browser, onboard as a second person in the same city, and have each say yes.
+browser, sign in with a different email, onboard as a second person in the same
+city, and have each say yes — the reveal, the live notification, and realtime
+chat all fire across the two sessions.
 
 ### Environment
 
@@ -130,29 +142,58 @@ Copy `.env.example` to `.env.local`. Everything is optional:
 
 ```
 app/
-  page.tsx                 landing
-  onboarding/              profile setup (two sentences, availability, location)
-  find/                    challenge dial + search + match card + reveal
-  matches/                 list + per-match chat / coffee spot / safety / post-coffee
-  api/                     session, profile, search, meet, pass, matches,
-                           messages, met, share, safety, reset
+  page.tsx                 landing (routes by session + profile state)
+  signin/                  passwordless magic-link sign in
+  onboarding/              create or edit your card (two sentences, photo, location)
+  find/                    availability + challenge dial + search + match card + reveal
+  matches/                 list + per-match realtime chat / spot / safety / post-coffee
+  template.tsx             app-wide screen transition
+  api/                     session, auth (request/verify), profile, photo, verify,
+                           search, meet, pass, matches, messages, met, share,
+                           safety, reset, stream (SSE)
 lib/
   matching.ts              the ranking engine + "why you two"
   text.ts                  topic + intent detection, similarity
   claude.ts                optional Claude rationale
   db.ts / seed.ts          file-backed store + demo people
-  cities.ts                launch cities + public coffee spots
+  events.ts                in-process pub/sub for live updates (swap → Redis)
+  magic.ts                 magic-link tokens (swap → email provider)
+  uploads.ts               photo storage helpers (swap → S3/R2)
+  cities.ts                launch cities + dense public coffee spots
   geo.ts / types.ts / session.ts / auth.ts / actions.ts
 components/
   Logo.tsx                 the overlapping-rings + steam mark
   ChallengeSlider.tsx      the similar↔different dial
-  MatchCard.tsx  Avatar.tsx
+  LiveNotifier.tsx         app-wide SSE notifications + toasts
+  useEventStream.ts        client hook for the live stream
+  MatchCard.tsx  Avatar.tsx  VerifiedBadge.tsx
 ```
 
 ---
 
-## What an MVP intentionally leaves for later
+## What's built vs. what's still ahead
 
-Real auth (magic link / OAuth), photo upload + verification, push notifications,
-a hosted database, live realtime messaging (this MVP polls), and the native app.
-The product surface and matching logic are built to carry into all of them.
+Most of the original "for later" list now ships in this MVP, each behind a clean
+seam so the production swap is a single module:
+
+- **Passwordless auth** — magic-link sign in (`lib/magic.ts`). Wire an email
+  provider (Resend/Postmark/SES) in `app/api/auth/request`; OAuth can sit beside it.
+- **Photo upload + verification** — local upload + an auth-gated serving route,
+  blurred until the mutual reveal, with a lightweight verification badge. Point
+  `lib/uploads.ts` at object storage and swap the `/api/verify` stub for a real
+  identity/liveness provider (Stripe Identity, Persona).
+- **Realtime messaging** — chat and notifications run over Server-Sent Events
+  (`/api/stream`) off an in-process bus (`lib/events.ts`); no more polling. For
+  multiple instances, swap the bus for Redis pub/sub or Postgres LISTEN/NOTIFY.
+- **Live notifications** — new matches/messages raise an in-app toast plus a
+  native browser notification (when permitted), anywhere in the app.
+
+Genuinely still ahead:
+
+- **Background push notifications** — the in-app/native notifications above work
+  while a tab is open; true background Web Push needs a service worker + VAPID keys.
+- **A hosted database** — the store stays file-backed (`lib/db.ts`); every call
+  site already goes through its repository helpers, so moving to Postgres/Supabase
+  is a one-module change.
+- **The native app** — a separate React Native project; the data model, API, and
+  matching logic all carry over.

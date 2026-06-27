@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { Avatar } from "@/components/Avatar";
-import { jpost } from "@/components/api";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { jget, jpost } from "@/components/api";
 import { CITIES } from "@/lib/cities";
-import { AVAILABILITY_LABELS, type AvailabilityWindow } from "@/lib/types";
-
-const AVAIL: AvailabilityWindow[] = ["now", "today", "weekend"];
+import type { SelfViewData } from "@/lib/actions";
 
 export default function Onboarding() {
   const router = useRouter();
@@ -17,14 +16,74 @@ export default function Onboarding() {
   const [city, setCity] = useState("austin");
   const [iAm, setIAm] = useState("");
   const [lookingTo, setLookingTo] = useState("");
-  const [availability, setAvailability] = useState<AvailabilityWindow>("today");
   const [hue, setHue] = useState(0);
+  const [shape, setShape] = useState(() => Math.floor(Math.random() * 5));
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [located, setLocated] = useState<"idle" | "ok" | "deny">("idle");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const shape = useMemo(() => Math.floor(Math.random() * 5), []);
+  // Onboarding requires a verified session (via the magic link). Send anyone
+  // who isn't signed in to /signin, and prefill the form when editing.
+  useEffect(() => {
+    jget<{ user: SelfViewData | null }>("/api/session").then((d) => {
+      if (!d.user) {
+        router.replace("/signin");
+        return;
+      }
+      const u = d.user;
+      setAuthEmail(u.email);
+      setEditing(u.profileComplete);
+      if (u.profileComplete) {
+        setName(u.name);
+        setAge(String(u.age));
+        setIAm(u.iAm);
+        setLookingTo(u.lookingTo);
+      }
+      setCity(u.city);
+      setHue(u.avatar.hue);
+      setShape(u.avatar.shape);
+      setPhotoUrl(u.photoUrl);
+      setVerified(u.verified);
+      setChecking(false);
+    });
+  }, [router]);
+
+  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!f) return;
+    setError("");
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("photo", f);
+    const r = await fetch("/api/photo", { method: "POST", body: fd });
+    const d = (await r.json()) as { user?: SelfViewData; error?: string };
+    setUploading(false);
+    if (d.user) {
+      setPhotoUrl(d.user.photoUrl);
+      setVerified(d.user.verified);
+    } else {
+      setError(d.error ?? "couldn't upload that image");
+    }
+  }
+
+  async function verifyPhoto() {
+    setError("");
+    setVerifying(true);
+    const d = await jpost<{ user?: SelfViewData; error?: string }>("/api/verify");
+    setVerifying(false);
+    if (d.user) setVerified(d.user.verified);
+    else setError(d.error ?? "verification didn't go through");
+  }
 
   function useMyLocation() {
     if (!navigator.geolocation) return setLocated("deny");
@@ -47,7 +106,6 @@ export default function Onboarding() {
       city,
       iAm,
       lookingTo,
-      availability,
       avatarHue: hue,
       avatarShape: shape,
       ...(coords ?? {}),
@@ -57,15 +115,30 @@ export default function Onboarding() {
     else setError(res.error ?? "something went wrong");
   }
 
+  if (checking) {
+    return (
+      <main className="frame items-center justify-center">
+        <Logo size={64} />
+      </main>
+    );
+  }
+
   return (
     <main className="frame py-8">
       <div className="flex items-center gap-3">
         <Logo size={40} steam={false} />
-        <h1 className="text-2xl font-bold tracking-tight">set up your card</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {editing ? "edit your card" : "set up your card"}
+        </h1>
       </div>
       <p className="serif mt-1 text-espresso/65">
-        two sentences is all it takes. takes about a minute.
+        {editing
+          ? "tweak anything — you choose when you're free at each search."
+          : "two sentences is all it takes. takes about a minute."}
       </p>
+      {authEmail && (
+        <p className="mt-1 text-xs text-ink/45">signed in as {authEmail}</p>
+      )}
 
       <div className="mt-6 flex flex-col gap-5">
         <div className="flex items-end gap-4">
@@ -118,29 +191,6 @@ export default function Onboarding() {
         </div>
 
         <div>
-          <label className="label">when are you free?</label>
-          <div className="grid grid-cols-3 gap-2">
-            {AVAIL.map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setAvailability(a)}
-                className={`rounded-2xl border px-2 py-3 text-sm font-semibold capitalize transition ${
-                  availability === a
-                    ? "border-teal bg-teal text-paper"
-                    : "border-tan/60 bg-white/50 text-ink/70"
-                }`}
-              >
-                {a === "now" ? "next 2 hrs" : a === "today" ? "today" : "this weekend"}
-              </button>
-            ))}
-          </div>
-          <p className="serif mt-2 text-xs text-espresso/55">
-            you&apos;re {AVAILABILITY_LABELS[availability]}.
-          </p>
-        </div>
-
-        <div>
           <label className="label">where are you?</label>
           <div className="flex gap-2">
             <select
@@ -170,7 +220,62 @@ export default function Onboarding() {
         </div>
 
         <div>
-          <label className="label">pick a look</label>
+          <label className="label">your photo (optional)</label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={onPickPhoto}
+          />
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="relative rounded-full ring-2 ring-transparent transition hover:ring-teal/40"
+              aria-label="upload a photo"
+            >
+              <Avatar avatar={{ hue, shape }} photoUrl={photoUrl} size={72} revealed />
+              {verified && (
+                <span className="absolute -bottom-1 -right-1">
+                  <VerifiedBadge size={22} className="ring-2 ring-paper" />
+                </span>
+              )}
+            </button>
+            <div className="flex-1">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="btn-ghost px-4 py-2 text-sm"
+                disabled={uploading}
+              >
+                {uploading ? "uploading…" : photoUrl ? "change photo" : "add a photo"}
+              </button>
+              {photoUrl && !verified && (
+                <button
+                  type="button"
+                  onClick={verifyPhoto}
+                  className="ml-2 text-sm font-semibold text-teal hover:underline disabled:opacity-50"
+                  disabled={verifying}
+                >
+                  {verifying ? "verifying…" : "verify it →"}
+                </button>
+              )}
+              {verified ? (
+                <p className="serif mt-2 text-xs text-teal">
+                  photo verified — matches will see a verified badge.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-ink/45">
+                  blurred until you both say yes. verifying adds a trust badge.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="label">{photoUrl ? "or pick a fallback look" : "pick a look"}</label>
           <div className="flex items-center gap-4">
             <Avatar avatar={{ hue, shape }} size={64} revealed />
             <div className="flex flex-wrap gap-2">
@@ -201,8 +306,23 @@ export default function Onboarding() {
         )}
 
         <button className="btn-primary w-full" onClick={submit} disabled={busy}>
-          {busy ? "setting up…" : "start finding people"}
+          {editing
+            ? busy
+              ? "saving…"
+              : "save changes"
+            : busy
+              ? "setting up…"
+              : "start finding people"}
         </button>
+        {editing && (
+          <button
+            type="button"
+            className="w-full py-1 text-center text-sm font-semibold text-ink/50 hover:text-ink"
+            onClick={() => router.push("/find")}
+          >
+            cancel
+          </button>
+        )}
         <p className="text-center text-xs text-ink/45">
           18+ only. by continuing you agree to meet in public places.
         </p>

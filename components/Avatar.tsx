@@ -49,35 +49,53 @@ function Motif({ shape, fg }: { shape: number; fg: string }) {
 
 export function Avatar({
   avatar,
+  photoUrl,
   size = 72,
   revealed = false,
   className = "",
 }: {
   avatar: AvatarT;
+  photoUrl?: string | null;
   size?: number;
   revealed?: boolean;
   className?: string;
 }) {
   const c = RAMP[((avatar.hue % 6) + 6) % 6];
+  // Pre-reveal we blur whatever's shown so identity stays hidden; the same
+  // treatment applies to a real photo or the geometric stand-in.
+  const obscure = {
+    filter: revealed ? "none" : "blur(7px) saturate(0.7) brightness(0.97)",
+    transform: revealed ? "none" : "scale(1.15)",
+    transition: "filter .5s ease, transform .5s ease",
+  } as const;
+
   return (
     <div
       className={`relative shrink-0 overflow-hidden rounded-full ring-1 ring-ink/10 ${className}`}
       style={{ width: size, height: size }}
     >
-      <svg
-        viewBox="0 0 100 100"
-        width={size}
-        height={size}
-        style={{
-          filter: revealed ? "none" : "blur(7px) saturate(0.7) brightness(0.97)",
-          transform: revealed ? "none" : "scale(1.15)",
-          transition: "filter .5s ease, transform .5s ease",
-        }}
-        aria-hidden="true"
-      >
-        <rect width="100" height="100" fill={c.bg} />
-        <Motif shape={avatar.shape} fg={c.fg} />
-      </svg>
+      {photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photoUrl}
+          alt=""
+          width={size}
+          height={size}
+          className="h-full w-full object-cover"
+          style={obscure}
+        />
+      ) : (
+        <svg
+          viewBox="0 0 100 100"
+          width={size}
+          height={size}
+          style={obscure}
+          aria-hidden="true"
+        >
+          <rect width="100" height="100" fill={c.bg} />
+          <Motif shape={avatar.shape} fg={c.fg} />
+        </svg>
+      )}
       {!revealed && <div className="absolute inset-0 bg-paper/10" />}
     </div>
   );

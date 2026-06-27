@@ -5,12 +5,24 @@ import Link from "next/link";
 import { Logo, Wordmark } from "@/components/Logo";
 import { jget } from "@/components/api";
 
+type SessionUser = { profileComplete: boolean } | null;
+
 export default function Landing() {
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [user, setUser] = useState<SessionUser | undefined>(undefined);
 
   useEffect(() => {
-    jget<{ user: unknown }>("/api/session").then((d) => setHasSession(!!d.user));
+    jget<{ user: SessionUser }>("/api/session").then((d) => setUser(d.user));
   }, []);
+
+  const loading = user === undefined;
+  const signedIn = !!user;
+  const onboarded = !!user?.profileComplete;
+  const primaryHref = !signedIn ? "/signin" : onboarded ? "/find" : "/onboarding";
+  const primaryLabel = !signedIn
+    ? "get started"
+    : onboarded
+      ? "find someone"
+      : "finish your card";
 
   return (
     <main className="frame items-center justify-center py-12 text-center">
@@ -29,23 +41,27 @@ export default function Landing() {
         </p>
 
         <div className="mt-10 w-full max-w-xs">
-          {hasSession === null ? (
+          {loading ? (
             <div className="btn-primary w-full opacity-60">…</div>
-          ) : hasSession ? (
-            <Link href="/find" className="btn-primary w-full">
-              find someone
-            </Link>
           ) : (
-            <Link href="/onboarding" className="btn-primary w-full">
-              get started
+            <Link href={primaryHref} className="btn-primary w-full">
+              {primaryLabel}
             </Link>
           )}
-          {hasSession && (
+          {signedIn && onboarded && (
             <Link
               href="/matches"
               className="mt-3 block text-sm font-semibold text-teal hover:underline"
             >
               your matches
+            </Link>
+          )}
+          {!signedIn && !loading && (
+            <Link
+              href="/signin"
+              className="mt-3 block text-sm font-semibold text-teal hover:underline"
+            >
+              already have an account? sign in
             </Link>
           )}
         </div>

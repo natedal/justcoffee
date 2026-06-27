@@ -28,9 +28,6 @@ export async function POST(req: Request) {
   const lookingTo = clampStr(body.lookingTo, 140);
   const age = Number(body.age);
   const cityKey = clampStr(body.city, 30) || "austin";
-  const availability = AVAILABILITY.includes(body.availability as AvailabilityWindow)
-    ? (body.availability as AvailabilityWindow)
-    : "today";
 
   if (!name) return Response.json({ error: "name is required" }, { status: 400 });
   if (!Number.isFinite(age) || age < 18)
@@ -40,19 +37,31 @@ export async function POST(req: Request) {
   if (!lookingTo)
     return Response.json({ error: "tell us what you're looking for" }, { status: 400 });
 
+  const existingId = await getSessionUserId();
+  const existing = existingId ? db.getUser(existingId) : undefined;
+
   const city = getCity(cityKey);
-  // Honor real device coordinates if provided; otherwise scatter near the city.
+  // Honor real device coordinates if provided; on edit, keep the saved location
+  // (unless the city changed); otherwise scatter near the city.
   const hasCoords =
     Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng));
   const loc = hasCoords
     ? { lat: Number(body.lat), lng: Number(body.lng) }
-    : jitter(city.lat, city.lng, 2.2);
+    : existing && existing.city === cityKey
+      ? { lat: existing.lat, lng: existing.lng }
+      : jitter(city.lat, city.lng, 2.2);
 
-  const existingId = await getSessionUserId();
-  const existing = existingId ? db.getUser(existingId) : undefined;
+  // Availability is now chosen per search (see /api/search), so onboarding no
+  // longer sends it: preserve what's on file, defaulting for brand-new users.
+  const availability: AvailabilityWindow = AVAILABILITY.includes(
+    body.availability as AvailabilityWindow,
+  )
+    ? (body.availability as AvailabilityWindow)
+    : (existing?.availability ?? "now");
 
   const user: User = {
     id: existing?.id ?? db.id("user"),
+    email: existing?.email,
     name,
     age: Math.round(age),
     pseudonym:
@@ -60,6 +69,8 @@ export async function POST(req: Request) {
       PSEUDONYMS[Math.floor(Math.random() * PSEUDONYMS.length)],
     iAm,
     lookingTo,
+    photoUrl: existing?.photoUrl,
+    verified: existing?.verified,
     avatar: {
       hue: Number.isFinite(Number(body.avatarHue))
         ? Math.abs(Math.round(Number(body.avatarHue))) % 6

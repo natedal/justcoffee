@@ -7,17 +7,26 @@ import { Logo, Wordmark } from "@/components/Logo";
 import { Avatar } from "@/components/Avatar";
 import { MatchCard } from "@/components/MatchCard";
 import { ChallengeSlider } from "@/components/ChallengeSlider";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { jget, jpost } from "@/components/api";
-import type { Candidate } from "@/lib/types";
+import type { Candidate, AvailabilityWindow } from "@/lib/types";
 import type { SelfViewData, MatchViewData } from "@/lib/actions";
 
 type Step = "idle" | "searching" | "card" | "empty" | "matched";
+
+const AVAIL: AvailabilityWindow[] = ["now", "today", "weekend"];
+const AVAIL_LABEL: Record<AvailabilityWindow, string> = {
+  now: "next 2 hrs",
+  today: "today",
+  weekend: "this weekend",
+};
 
 export default function Find() {
   const router = useRouter();
   const [me, setMe] = useState<SelfViewData | null>(null);
   const [aiOn, setAiOn] = useState(false);
   const [challenge, setChallenge] = useState(0.5);
+  const [availability, setAvailability] = useState<AvailabilityWindow>("now");
   const [step, setStep] = useState<Step>("idle");
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [match, setMatch] = useState<MatchViewData | null>(null);
@@ -27,9 +36,11 @@ export default function Find() {
 
   useEffect(() => {
     jget<{ user: SelfViewData | null; aiEnabled: boolean }>("/api/session").then((d) => {
-      if (!d.user) router.replace("/onboarding");
+      if (!d.user) router.replace("/signin");
+      else if (!d.user.profileComplete) router.replace("/onboarding");
       else {
         setMe(d.user);
+        setAvailability(d.user.availability);
         setAiOn(d.aiEnabled);
       }
     });
@@ -43,7 +54,10 @@ export default function Find() {
   async function find() {
     setStep("searching");
     setCandidate(null);
-    const d = await jpost<{ candidate: Candidate | null }>("/api/search", { challenge });
+    const d = await jpost<{ candidate: Candidate | null }>("/api/search", {
+      challenge,
+      availability,
+    });
     if (d.candidate) {
       setCandidate(d.candidate);
       setStep("card");
@@ -101,14 +115,19 @@ export default function Find() {
         <Link href="/">
           <Wordmark className="text-xl" />
         </Link>
-        <Link href="/matches" className="text-sm font-semibold text-teal hover:underline">
-          matches
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/matches" className="text-sm font-semibold text-teal hover:underline">
+            matches
+          </Link>
+          <Link href="/onboarding" aria-label="edit your card" title="edit your card">
+            <Avatar avatar={me.avatar} photoUrl={me.photoUrl} size={34} revealed />
+          </Link>
+        </div>
       </header>
 
       {/* ---------- IDLE: pick challenge + search ---------- */}
       {step === "idle" && (
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 animate-fade-in flex-col">
           <div className="flex flex-1 flex-col items-center justify-center text-center">
             <Logo size={92} />
             <h1 className="mt-6 text-3xl font-bold tracking-tight">
@@ -117,10 +136,29 @@ export default function Find() {
               to meet today?
             </h1>
             <p className="serif mt-2 text-espresso/65">
-              set the dial, then we&apos;ll find someone nearby.
+              set when &amp; the dial, then we&apos;ll find someone nearby.
             </p>
           </div>
           <div className="space-y-4 pb-2">
+            <div className="card p-5">
+              <span className="text-sm font-semibold text-ink/70">when are you free?</span>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {AVAIL.map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setAvailability(a)}
+                    className={`rounded-2xl border px-2 py-3 text-sm font-semibold transition ${
+                      availability === a
+                        ? "border-teal bg-teal text-paper"
+                        : "border-tan/60 bg-white/50 text-ink/70 hover:bg-tan/15"
+                    }`}
+                  >
+                    {AVAIL_LABEL[a]}
+                  </button>
+                ))}
+              </div>
+            </div>
             <ChallengeSlider value={challenge} onChange={setChallenge} />
             <button className="btn-primary w-full" onClick={find}>
               find someone
@@ -134,7 +172,7 @@ export default function Find() {
 
       {/* ---------- SEARCHING ---------- */}
       {step === "searching" && (
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
+        <div className="flex flex-1 animate-fade-in flex-col items-center justify-center text-center">
           <div className="animate-pulse">
             <Logo size={96} />
           </div>
@@ -144,7 +182,7 @@ export default function Find() {
 
       {/* ---------- CANDIDATE CARD ---------- */}
       {step === "card" && candidate && (
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 animate-fade-in flex-col">
           <button
             onClick={() => setStep("idle")}
             className="mb-3 mt-2 self-start text-sm font-semibold text-ink/50 hover:text-ink"
@@ -168,7 +206,7 @@ export default function Find() {
 
       {/* ---------- EMPTY ---------- */}
       {step === "empty" && (
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
+        <div className="flex flex-1 animate-fade-in flex-col items-center justify-center text-center">
           <Logo size={84} steam={false} />
           <h2 className="mt-6 text-2xl font-bold">no one around right now</h2>
           <p className="serif mt-2 max-w-xs text-espresso/65">
@@ -192,16 +230,24 @@ export default function Find() {
           <Logo size={84} />
           <p className="serif mt-5 text-espresso/70">you both said yes.</p>
           <div className="mt-5 flex items-center justify-center">
-            <Avatar avatar={me.avatar} size={84} revealed className="ring-2 ring-paper" />
+            <Avatar
+              avatar={me.avatar}
+              photoUrl={me.photoUrl}
+              size={84}
+              revealed
+              className="ring-2 ring-paper"
+            />
             <Avatar
               avatar={match.other.avatar}
+              photoUrl={match.other.photoUrl}
               size={84}
               revealed
               className="-ml-5 ring-2 ring-paper"
             />
           </div>
-          <h1 className="mt-5 text-3xl font-bold tracking-tight">
+          <h1 className="mt-5 flex items-center justify-center gap-2 text-3xl font-bold tracking-tight">
             meet {match.other.name}
+            {match.other.verified && <VerifiedBadge />}
           </h1>
           <p className="mt-1 text-ink/70">{match.other.iAm}</p>
 
@@ -238,7 +284,7 @@ export default function Find() {
       {/* ---------- toast ---------- */}
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 flex justify-center px-6">
-          <div className="rounded-full bg-ink px-5 py-3 text-sm font-medium text-paper shadow-card">
+          <div className="animate-sheet-up rounded-full bg-ink px-5 py-3 text-sm font-medium text-paper shadow-card">
             {toast}
           </div>
         </div>
@@ -247,11 +293,11 @@ export default function Find() {
       {/* ---------- report sheet ---------- */}
       {reporting && candidate && (
         <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-20 flex animate-fade-in items-end justify-center bg-ink/40 p-4"
           onClick={() => setReporting(false)}
         >
           <div
-            className="card w-full max-w-md p-6"
+            className="card w-full max-w-md animate-sheet-up p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-bold">not feeling safe?</h3>

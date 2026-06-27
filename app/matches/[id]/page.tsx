@@ -5,8 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Avatar } from "@/components/Avatar";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { jget, jpost } from "@/components/api";
+import { useEventStream } from "@/components/useEventStream";
 import type { MatchViewData } from "@/lib/actions";
+import type { JCEvent } from "@/lib/events";
 
 type Msg = { id: string; mine: boolean; body: string; at: number };
 
@@ -43,9 +46,17 @@ export default function MatchDetail() {
       else setNotFound(true);
     });
     loadMessages();
-    const t = setInterval(loadMessages, 4000);
-    return () => clearInterval(t);
   }, [id, loadMessages]);
+
+  // Live updates: refresh this thread the moment the other person sends a
+  // message (replaces the old 4s polling loop).
+  const onLive = useCallback(
+    (e: JCEvent) => {
+      if (e.matchId === id) loadMessages();
+    },
+    [id, loadMessages],
+  );
+  useEventStream(onLive);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -116,9 +127,17 @@ export default function MatchDetail() {
         <Link href="/matches" className="text-ink/50 hover:text-ink">
           ‹
         </Link>
-        <Avatar avatar={match.other.avatar} size={40} revealed />
+        <Avatar
+          avatar={match.other.avatar}
+          photoUrl={match.other.photoUrl}
+          size={40}
+          revealed
+        />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-bold leading-tight">{match.other.name}</p>
+          <p className="flex items-center gap-1.5 truncate font-bold leading-tight">
+            {match.other.name}
+            {match.other.verified && <VerifiedBadge size={15} />}
+          </p>
           <p className="truncate text-xs text-ink/50">
             {expired ? "match expired" : closed ? "closed" : timeLeft(match.expiresAt)}
           </p>
@@ -224,10 +243,10 @@ export default function MatchDetail() {
       {/* share sheet */}
       {shareText !== null && (
         <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-20 flex animate-fade-in items-end justify-center bg-ink/40 p-4"
           onClick={() => setShareText(null)}
         >
-          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-full max-w-md animate-sheet-up p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold">share your plans</h3>
             <p className="serif mt-1 text-sm text-espresso/65">
               send this to someone you trust before you head out.
@@ -250,10 +269,10 @@ export default function MatchDetail() {
       {/* safety sheet */}
       {reporting && (
         <div
-          className="fixed inset-0 z-20 flex items-end justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-20 flex animate-fade-in items-end justify-center bg-ink/40 p-4"
           onClick={() => setReporting(false)}
         >
-          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-full max-w-md animate-sheet-up p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold">safety</h3>
             <p className="serif mt-1 text-sm text-espresso/65">
               block {match.other.name} and close this conversation. always meet in

@@ -3,21 +3,31 @@ import type { Candidate, CoffeeSpot, Match, User } from "./types";
 import { rankCandidates, computeSignals } from "./matching";
 import { enhanceRationale } from "./claude";
 import { haversineMi, midpoint } from "./geo";
+import { publish } from "./events";
 
 // ---- serialization views ------------------------------------------------
+
+/** Has this user finished onboarding (vs. an auth-only stub)? */
+export function isProfileComplete(u: User): boolean {
+  return Boolean(u.name.trim() && u.iAm.trim() && u.lookingTo.trim());
+}
 
 /** The signed-in user's own profile. */
 export function selfView(u: User) {
   return {
     id: u.id,
+    email: u.email ?? null,
     name: u.name,
     age: u.age,
     pseudonym: u.pseudonym,
     iAm: u.iAm,
     lookingTo: u.lookingTo,
     avatar: u.avatar,
+    photoUrl: u.photoUrl ?? null,
+    verified: Boolean(u.verified),
     city: u.city,
     availability: u.availability,
+    profileComplete: isProfileComplete(u),
   };
 }
 
@@ -42,6 +52,8 @@ export function matchView(m: Match, userId: string) {
           name: other.name,
           age: other.age,
           avatar: other.avatar,
+          photoUrl: other.photoUrl ?? null, // safe to reveal: identities unlocked
+          verified: Boolean(other.verified),
           iAm: other.iAm,
           lookingTo: other.lookingTo,
           city: other.city,
@@ -66,13 +78,21 @@ function excludeSetFor(userId: string): Set<string> {
   return exclude;
 }
 
-/** Pick (and remember) the next best candidate at the given challenge level. */
+/** Pick (and remember) the next best candidate at the given challenge level.
+ *  Availability is chosen per search and recorded on the profile so the matcher
+ *  and the post-match rationale stay in sync. */
 export async function nextCandidateFor(
   userId: string,
   challenge: number,
+  availability?: User["availability"],
 ): Promise<Candidate | null> {
   const viewer = db.getUser(userId);
   if (!viewer) return null;
+
+  if (availability && availability !== viewer.availability) {
+    viewer.availability = availability;
+    db.upsertUser(viewer);
+  }
 
   const search = db.getSearch(userId);
   search.challenge = challenge;
@@ -116,18 +136,72 @@ function demoSaysYes(cand: User, viewer: User): boolean {
   return hashUnit(`${cand.id}->${viewer.id}`) < cand.openness;
 }
 
-function nearestSpot(a: User, b: User): CoffeeSpot {
+// A suggested spot should be genuinely walkable from the midpoint of the two
+// people. If the nearest curated public place is farther than this, we generate
+// a neighborhood cafe right at the midpoint instead of sending them across town.
+const WALKABLE_MI = 1.0;
+
+const NEIGHBORHOOD_NAMES = [
+  "Neighborhood Coffee Co.",
+  "Corner Cup",
+  "The Local Roastery",
+  "Open Door Coffee",
+  "Common Grounds",
+  "Daybreak Coffee Bar",
+  "Halfway Espresso",
+  "Meeting Point Coffee",
+];
+
+function hashInt(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * A stable, public-by-default cafe placed at the midpoint, used only when no
+ * curated spot is within walking distance. In production this is where a places
+ * API (Google/Foursquare) returns a real nearby cafe; the shape is identical so
+ * it's a drop-in swap.
+ */
+function neighborhoodSpotAt(lat: number, lng: number): CoffeeSpot {
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const name = NEIGHBORHOOD_NAMES[hashInt(key) % NEIGHBORHOOD_NAMES.length];
+  return {
+    id: `spot-near-${key}`,
+    name,
+    kind: "cafe",
+    city: "",
+    lat,
+    lng,
+    blurb: "A public cafe a few minutes from you both — meet where it's easy.",
+  };
+}
+
+/** Pick the closest public place to the midpoint, falling back to a walkable
+ *  neighborhood cafe when nothing curated is close. */
+function chooseSpot(a: User, b: User): CoffeeSpot {
   const mid = midpoint(a.lat, a.lng, b.lat, b.lng);
-  const pool = db.spotsInCity(a.city);
-  const candidates = pool.length ? pool : db.spotsInCity(b.city);
-  let best = candidates[0];
+  const pool =
+    a.city === b.city
+      ? db.spotsInCity(a.city)
+      : [...db.spotsInCity(a.city), ...db.spotsInCity(b.city)];
+
+  let best: CoffeeSpot | undefined;
   let bestD = Infinity;
-  for (const s of candidates) {
+  for (const s of pool) {
     const d = haversineMi(mid.lat, mid.lng, s.lat, s.lng);
     if (d < bestD) {
       bestD = d;
       best = s;
     }
+  }
+
+  if (!best || bestD > WALKABLE_MI) {
+    return db.addSpot(neighborhoodSpotAt(mid.lat, mid.lng));
   }
   return best;
 }
@@ -135,7 +209,7 @@ function nearestSpot(a: User, b: User): CoffeeSpot {
 function makeMatch(viewer: User, other: User, challenge: number): Match {
   const existing = db.existingMatchBetween(viewer.id, other.id);
   if (existing) return existing;
-  const spot = nearestSpot(viewer, other);
+  const spot = chooseSpot(viewer, other);
   const now = Date.now();
   return db.createMatch({
     id: db.id("match"),
@@ -187,6 +261,13 @@ export function expressInterest(userId: string, candId: string): MeetResult {
     const s = db.getSearch(userId);
     s.currentCandidateId = undefined;
     db.setSearch(s);
+    // Let the other person know in real time (the actor sees the reveal now).
+    publish(cand.id, {
+      type: "match",
+      matchId: m.id,
+      withName: viewer.name,
+      at: Date.now(),
+    });
     return { matched: true, theyPassed: false, matchId: m.id };
   }
   return { matched: false, theyPassed };

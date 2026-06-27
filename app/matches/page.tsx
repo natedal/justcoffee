@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Logo, Wordmark } from "@/components/Logo";
 import { Avatar } from "@/components/Avatar";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { jget } from "@/components/api";
 import type { MatchViewData } from "@/lib/actions";
 
@@ -56,10 +57,16 @@ export default function Matches() {
               href={`/matches/${m.id}`}
               className="card flex items-center gap-4 p-4 transition hover:shadow-lift"
             >
-              <Avatar avatar={m.other.avatar} size={56} revealed />
+              <Avatar
+                avatar={m.other.avatar}
+                photoUrl={m.other.photoUrl}
+                size={56}
+                revealed
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="truncate text-lg font-bold">{m.other.name}</p>
+                  {m.other.verified && <VerifiedBadge size={16} />}
                   {m.status === "expired" && (
                     <span className="chip border-terracotta/40 text-terracotta">
                       expired

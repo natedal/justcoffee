@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { LiveNotifier } from "@/components/LiveNotifier";
 
 export const metadata: Metadata = {
   title: "justcoffee — meet a stranger for coffee",
@@ -20,7 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="paper-bg">{children}</body>
+      <body className="paper-bg">
+        {children}
+        <LiveNotifier />
+      </body>
     </html>
   );
 }
