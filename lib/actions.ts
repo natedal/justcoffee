@@ -2,6 +2,7 @@ import * as db from "./db";
 import type { Candidate, CoffeeSpot, Match, User } from "./types";
 import { rankCandidates, computeSignals } from "./matching";
 import { enhanceRationale } from "./claude";
+import { aiRankCandidates } from "./ai-scorer";
 import { haversineMi, midpoint } from "./geo";
 import { publish } from "./events";
 import { COFFEE_SPOTS, getSpotById, spotsForCity } from "./cities";
@@ -98,18 +99,31 @@ export async function nextCandidateFor(
 
   const search = await db.getSearch(userId);
   search.challenge = challenge;
+
+  // Deterministic pass: applies the hard constraints (distance, exclusions) and
+  // produces a sensible pre-ranking. This is both the AI shortlist and the
+  // fallback when the model is disabled or unavailable.
   const ranked = rankCandidates(
     viewer,
     await db.allUsers(),
     challenge,
     await excludeSetFor(userId),
   );
-  const top = ranked[0];
+
+  // AI pass: let Claude actually score & rank the shortlist (and write the
+  // rationale in one shot). Returns null if the model is off/unavailable.
+  const AI_SHORTLIST = 12;
+  const aiRanked = await aiRankCandidates(viewer, ranked.slice(0, AI_SHORTLIST), challenge);
+  const finalRanked = aiRanked && aiRanked.length ? aiRanked : ranked;
+
+  const top = finalRanked[0];
   search.currentCandidateId = top?.id;
   await db.setSearch(search);
   if (!top) return null;
 
-  // Optional: let Claude rewrite the rationale in justcoffee's voice.
+  // Write the winner's "why you two" note with Claude (no-op without a key,
+  // in which case the deterministic template stands). The scorer only returns
+  // numbers, so this is the single place prose is generated.
   const cand = (await db.getUser(top.id))!;
   const ai = await enhanceRationale(
     viewer,
