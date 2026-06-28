@@ -60,8 +60,13 @@ export async function enhanceRationale(
       .join("")
       .trim();
     return text || null;
-  } catch {
-    // Any failure (no network, bad key, rate limit) falls back to the built-in rationale.
+  } catch (err) {
+    // Any failure (no network, bad key, bad model, rate limit) falls back to the
+    // built-in rationale — but log it, so a misconfiguration doesn't hide silently.
+    console.error(
+      `[claude] rationale generation failed (model="${MODEL}"):`,
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
