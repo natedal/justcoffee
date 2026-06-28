@@ -1,6 +1,7 @@
 import { currentUserId, unauthorized } from "@/lib/auth";
 import * as db from "@/lib/db";
 import { publish } from "@/lib/events";
+import { track } from "@/lib/analytics";
 
 async function ensureParticipant(matchId: string, uid: string) {
   const m = await db.getMatch(matchId);
@@ -60,6 +61,9 @@ export async function POST(
     body,
     at: now,
   });
+
+  // Only the fact and length of a message — never its contents (private).
+  track(uid, "message_sent", { match_id: id, length: body.length });
 
   // Push the new message to the other participant in real time.
   const otherId = m.aId === uid ? m.bId : m.aId;

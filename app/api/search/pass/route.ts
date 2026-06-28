@@ -1,5 +1,6 @@
 import { currentUserId, unauthorized } from "@/lib/auth";
 import { passCandidate } from "@/lib/actions";
+import { track } from "@/lib/analytics";
 
 // POST /api/search/pass  { candidateId }
 export async function POST(req: Request) {
@@ -15,5 +16,6 @@ export async function POST(req: Request) {
   if (!candidateId) return Response.json({ error: "candidateId required" }, { status: 400 });
 
   await passCandidate(uid, candidateId);
+  track(uid, "candidate_passed");
   return Response.json({ ok: true });
 }

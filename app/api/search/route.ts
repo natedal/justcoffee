@@ -1,6 +1,7 @@
 import { currentUserId, unauthorized } from "@/lib/auth";
 import { nextCandidateFor } from "@/lib/actions";
 import { aiEnabled } from "@/lib/claude";
+import { challengeBucket, track } from "@/lib/analytics";
 import type { AvailabilityWindow } from "@/lib/types";
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -23,5 +24,10 @@ export async function POST(req: Request) {
   }
 
   const candidate = await nextCandidateFor(uid, challenge, availability);
+  track(uid, "search_started", {
+    challenge: challengeBucket(challenge),
+    availability: availability ?? null,
+    found_candidate: Boolean(candidate),
+  });
   return Response.json({ candidate, aiEnabled: aiEnabled() });
 }

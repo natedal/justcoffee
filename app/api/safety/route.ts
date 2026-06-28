@@ -1,5 +1,6 @@
 import { currentUserId, unauthorized } from "@/lib/auth";
 import { blockUser, reportUser } from "@/lib/actions";
+import { track } from "@/lib/analytics";
 
 // POST /api/safety  { targetId, action: "block" | "report", reason?, context? }
 // Available at any time — including before the reveal.
@@ -18,16 +19,15 @@ export async function POST(req: Request) {
   if (!targetId) return Response.json({ error: "targetId required" }, { status: 400 });
 
   if (action === "report") {
-    await reportUser(
-      uid,
-      targetId,
-      String(body.reason ?? "unspecified").slice(0, 80),
-      String(body.context ?? "").slice(0, 300),
-    );
+    const reason = String(body.reason ?? "unspecified").slice(0, 80);
+    await reportUser(uid, targetId, reason, String(body.context ?? "").slice(0, 300));
+    // The reason category is safe to track; the free-text context is not.
+    track(uid, "user_reported", { reason });
     return Response.json({ ok: true, blocked: true, reported: true });
   }
   if (action === "block") {
     await blockUser(uid, targetId);
+    track(uid, "user_blocked");
     return Response.json({ ok: true, blocked: true });
   }
   return Response.json({ error: "unknown action" }, { status: 400 });

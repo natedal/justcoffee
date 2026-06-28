@@ -5,6 +5,7 @@ import { isProfileComplete } from "@/lib/actions";
 import * as db from "@/lib/db";
 import { getCity } from "@/lib/cities";
 import { jitter } from "@/lib/geo";
+import { identify, track } from "@/lib/analytics";
 import type { User } from "@/lib/types";
 
 const PSEUDONYMS = [
@@ -37,6 +38,7 @@ export async function GET(req: Request) {
   }
 
   let user = await db.getUserByEmail(email);
+  const isNew = !user;
   if (!user) {
     const city = getCity("austin");
     const loc = jitter(city.lat, city.lng, 2.2);
@@ -61,6 +63,8 @@ export async function GET(req: Request) {
   }
 
   await startSession(user.id);
+  identify(user.id, { city: user.city });
+  track(user.id, isNew ? "signed_up" : "signed_in");
   const dest = isProfileComplete(user) ? "/find" : "/onboarding";
   return NextResponse.redirect(new URL(dest, origin));
 }

@@ -1,5 +1,6 @@
 import { getSessionUserId, startSession } from "@/lib/session";
-import { selfView } from "@/lib/actions";
+import { selfView, isProfileComplete } from "@/lib/actions";
+import { identify, track } from "@/lib/analytics";
 import * as db from "@/lib/db";
 import type { AvailabilityWindow, User } from "@/lib/types";
 import { getCity } from "@/lib/cities";
@@ -90,5 +91,14 @@ export async function POST(req: Request) {
 
   await db.upsertUser(user);
   await startSession(user.id);
+
+  // First time this profile becomes complete = activation; otherwise it's an edit.
+  const wasComplete = existing ? isProfileComplete(existing) : false;
+  identify(user.id, { city: user.city, has_photo: Boolean(user.photoUrl) });
+  track(user.id, wasComplete ? "profile_updated" : "onboarding_completed", {
+    city: user.city,
+    has_photo: Boolean(user.photoUrl),
+  });
+
   return Response.json({ user: selfView(user) });
 }
