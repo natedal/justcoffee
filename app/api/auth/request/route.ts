@@ -1,4 +1,5 @@
 import { createToken, normalizeEmail } from "@/lib/magic";
+import { attrFromCookieHeader, anonFromCookieHeader, logEvent } from "@/lib/growth";
 
 // POST /api/auth/request  { email }
 // Issues a magic-link token and either emails it (when RESEND_API_KEY is set)
@@ -14,6 +15,19 @@ export async function POST(req: Request) {
     return Response.json({ error: "enter a valid email" }, { status: 400 });
 
   const token = createToken(email);
+
+  // Growth: attribute this signup (email captured) to the ad + market that drove
+  // it, reading the first-party cookie middleware set on the ad click. Guarded
+  // internally so it can never break the sign-in flow.
+  {
+    const cookie = req.headers.get("cookie");
+    await logEvent({
+      type: "signup",
+      attr: attrFromCookieHeader(cookie),
+      anonId: anonFromCookieHeader(cookie),
+      email,
+    });
+  }
 
   // Derive the base URL from the incoming request so the link always points
   // to the domain the user actually hit (works behind proxies, on Railway, etc.)
