@@ -181,7 +181,15 @@ export async function getUserByEmail(email: string): Promise<User | undefined> {
   return data ? rowToUser(data) : undefined;
 }
 export async function upsertUser(u: User): Promise<User> {
-  await supabase().from("users").upsert(userToRow(u), { onConflict: "id" });
+  const { error } = await supabase()
+    .from("users")
+    .upsert(userToRow(u), { onConflict: "id" });
+  if (error) {
+    // Fail loudly: a silent write failure (e.g. schema drift) previously caused
+    // sign-in to loop with no error. Surface it instead.
+    console.error("[db] upsertUser failed:", error.message);
+    throw new Error(`upsertUser failed: ${error.message}`);
+  }
   return u;
 }
 
