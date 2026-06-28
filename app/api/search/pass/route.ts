@@ -14,6 +14,6 @@ export async function POST(req: Request) {
   }
   if (!candidateId) return Response.json({ error: "candidateId required" }, { status: 400 });
 
-  passCandidate(uid, candidateId);
+  await passCandidate(uid, candidateId);
   return Response.json({ ok: true });
 }

@@ -16,10 +16,10 @@ export async function POST(req: Request) {
   }
   if (!candidateId) return Response.json({ error: "candidateId required" }, { status: 400 });
 
-  const result = expressInterest(uid, candidateId);
+  const result = await expressInterest(uid, candidateId);
   if (result.matched && result.matchId) {
-    const m = db.getMatch(result.matchId)!;
-    return Response.json({ matched: true, match: matchView(m, uid) });
+    const m = (await db.getMatch(result.matchId))!;
+    return Response.json({ matched: true, match: await matchView(m, uid) });
   }
   return Response.json({ matched: false, theyPassed: result.theyPassed });
 }

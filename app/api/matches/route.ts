@@ -6,9 +6,9 @@ import * as db from "@/lib/db";
 export async function GET() {
   const uid = await currentUserId();
   if (!uid) return unauthorized();
-  const matches = db
-    .matchesForUser(uid)
-    .filter((m) => m.status !== "closed")
-    .map((m) => matchView(m, uid));
+  const all = await db.matchesForUser(uid);
+  const matches = await Promise.all(
+    all.filter((m) => m.status !== "closed").map((m) => matchView(m, uid)),
+  );
   return Response.json({ matches });
 }

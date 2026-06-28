@@ -10,8 +10,8 @@ export async function GET(
   const uid = await currentUserId();
   if (!uid) return unauthorized();
   const { id } = await params;
-  const m = db.getMatch(id);
+  const m = await db.getMatch(id);
   if (!m || (m.aId !== uid && m.bId !== uid))
     return Response.json({ error: "not found" }, { status: 404 });
-  return Response.json({ match: matchView(m, uid) });
+  return Response.json({ match: await matchView(m, uid) });
 }

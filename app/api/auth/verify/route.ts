@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/signin?error=expired", origin));
   }
 
-  let user = db.getUserByEmail(email);
+  let user = await db.getUserByEmail(email);
   if (!user) {
     const city = getCity("austin");
     const loc = jitter(city.lat, city.lng, 2.2);
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
       openness: 1,
       createdAt: Date.now(),
     } satisfies User;
-    db.upsertUser(user);
+    await db.upsertUser(user);
   }
 
   await startSession(user.id);

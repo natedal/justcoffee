@@ -2,14 +2,15 @@ import { currentUserId, unauthorized } from "@/lib/auth";
 import * as db from "@/lib/db";
 import { publish } from "@/lib/events";
 
-function ensureParticipant(matchId: string, uid: string) {
-  const m = db.getMatch(matchId);
+async function ensureParticipant(matchId: string, uid: string) {
+  const m = await db.getMatch(matchId);
   if (!m || (m.aId !== uid && m.bId !== uid)) return null;
   return m;
 }
 
-function serialize(matchId: string, uid: string) {
-  return db.messagesForMatch(matchId).map((msg) => ({
+async function serialize(matchId: string, uid: string) {
+  const msgs = await db.messagesForMatch(matchId);
+  return msgs.map((msg) => ({
     id: msg.id,
     mine: msg.fromId === uid,
     body: msg.body,
@@ -25,9 +26,9 @@ export async function GET(
   const uid = await currentUserId();
   if (!uid) return unauthorized();
   const { id } = await params;
-  if (!ensureParticipant(id, uid))
+  if (!(await ensureParticipant(id, uid)))
     return Response.json({ error: "not found" }, { status: 404 });
-  return Response.json({ messages: serialize(id, uid) });
+  return Response.json({ messages: await serialize(id, uid) });
 }
 
 // POST /api/matches/:id/messages  { body }
@@ -38,7 +39,7 @@ export async function POST(
   const uid = await currentUserId();
   if (!uid) return unauthorized();
   const { id } = await params;
-  const m = ensureParticipant(id, uid);
+  const m = await ensureParticipant(id, uid);
   if (!m) return Response.json({ error: "not found" }, { status: 404 });
   if (m.status === "closed")
     return Response.json({ error: "this conversation is closed" }, { status: 403 });
@@ -52,7 +53,7 @@ export async function POST(
   if (!body) return Response.json({ error: "empty message" }, { status: 400 });
 
   const now = Date.now();
-  db.addMessage({
+  await db.addMessage({
     id: db.id("msg"),
     matchId: id,
     fromId: uid,
@@ -62,7 +63,7 @@ export async function POST(
 
   // Push the new message to the other participant in real time.
   const otherId = m.aId === uid ? m.bId : m.aId;
-  const sender = db.getUser(uid);
+  const sender = await db.getUser(uid);
   publish(otherId, {
     type: "message",
     matchId: id,
@@ -71,5 +72,5 @@ export async function POST(
     at: now,
   });
 
-  return Response.json({ messages: serialize(id, uid) });
+  return Response.json({ messages: await serialize(id, uid) });
 }

@@ -5,7 +5,7 @@ import * as db from "./db";
 export async function currentUserId(): Promise<string | null> {
   const uid = await getSessionUserId();
   if (!uid) return null;
-  return db.getUser(uid) ? uid : null;
+  return (await db.getUser(uid)) ? uid : null;
 }
 
 export function unauthorized() {

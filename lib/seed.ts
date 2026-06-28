@@ -124,6 +124,55 @@ const PERSONAS: Persona[] = [
     lookingTo: "I'm looking to chew on the big questions with a total stranger.",
     availability: "weekend", openness: 0.85,
   },
+  // New York — a second dense metro so the matcher has a real pool there too.
+  {
+    name: "Yusuf", pseudonym: "Atlas", age: 35, city: "nyc",
+    iAm: "I'm a progressive union organizer in Brooklyn.",
+    lookingTo: "I want to really understand how a small-business owner sees the economy.",
+    availability: "now", openness: 0.9,
+  },
+  {
+    name: "Diane", pseudonym: "Birch", age: 47, city: "nyc",
+    iAm: "I'm a finance lifer who's quietly conservative.",
+    lookingTo: "I'd like to explain why I see markets the way I do to someone who disagrees.",
+    availability: "now", openness: 0.85,
+  },
+  {
+    name: "Priya", pseudonym: "Cove", age: 28, city: "nyc",
+    iAm: "I'm a burned-out ER resident who just moved to the city.",
+    lookingTo: "I need to vent to someone completely outside of medicine.",
+    availability: "now", openness: 0.8,
+  },
+  {
+    name: "Walt", pseudonym: "Dune", age: 61, city: "nyc",
+    iAm: "I'm a retired subway conductor and a patient listener.",
+    lookingTo: "I'd like to listen to someone who needs to talk something through.",
+    availability: "today", openness: 0.95,
+  },
+  {
+    name: "Mei", pseudonym: "Echo", age: 24, city: "nyc",
+    iAm: "I'm a grad student who knows almost no one in New York.",
+    lookingTo: "I'm looking to make a friend and feel less alone in a huge city.",
+    availability: "today", openness: 0.9,
+  },
+  {
+    name: "Sol", pseudonym: "Ferro", age: 33, city: "nyc",
+    iAm: "I'm a painter waiting tables in Queens.",
+    lookingTo: "I want to swap creative survival stories with someone who gets it.",
+    availability: "weekend", openness: 0.85,
+  },
+  {
+    name: "Ibrahim", pseudonym: "Glade", age: 30, city: "nyc",
+    iAm: "I'm a devout Muslim and a high-school physics teacher.",
+    lookingTo: "I want to talk about faith and meaning with someone who believes differently.",
+    availability: "today", openness: 0.8,
+  },
+  {
+    name: "Hannah", pseudonym: "Haven", age: 38, city: "nyc",
+    iAm: "I'm a cheerful atheist and a documentary editor.",
+    lookingTo: "I'm curious what faith actually feels like from the inside.",
+    availability: "today", openness: 0.85,
+  },
 ];
 
 export function buildSeedUsers(): User[] {

@@ -94,3 +94,7 @@ export const COFFEE_SPOTS: CoffeeSpot[] = [
 export function spotsForCity(city: string): CoffeeSpot[] {
   return COFFEE_SPOTS.filter((s) => s.city === city);
 }
+
+export function getSpotById(id: string): CoffeeSpot | undefined {
+  return COFFEE_SPOTS.find((s) => s.id === id);
+}

@@ -1,212 +1,301 @@
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import type {
-  DBShape,
   User,
   SearchState,
   Match,
   Message,
   Report,
   Block,
-  CoffeeSpot,
 } from "./types";
-import { COFFEE_SPOTS } from "./cities";
+import { supabase } from "./supabase";
 import { buildSeedUsers } from "./seed";
 
-// File-backed JSON store. Single source of truth for the MVP. Swap this module
-// for a Postgres/Supabase data layer later — call sites only use the helpers
-// exported below, not the storage mechanism.
-
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
-
-function emptyDB(): DBShape {
-  return {
-    users: {},
-    searches: {},
-    interests: [],
-    matches: {},
-    messages: [],
-    reports: [],
-    blocks: [],
-    spots: COFFEE_SPOTS,
-    seeded: false,
-  };
-}
-
-function seed(db: DBShape): DBShape {
-  for (const u of buildSeedUsers()) db.users[u.id] = u;
-  db.spots = COFFEE_SPOTS;
-  db.seeded = true;
-  return db;
-}
-
-function load(): DBShape {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, "utf8");
-      const parsed = JSON.parse(raw) as DBShape;
-      // keep coffee spots fresh from code
-      parsed.spots = COFFEE_SPOTS;
-      return parsed;
-    }
-  } catch {
-    // fall through to a fresh seeded store
-  }
-  return seed(emptyDB());
-}
-
-// Survive Next.js dev hot-reloads by stashing the instance on globalThis.
-const g = globalThis as unknown as { __jc_db?: DBShape };
-function db(): DBShape {
-  if (!g.__jc_db) g.__jc_db = load();
-  return g.__jc_db;
-}
-
-export function save(): void {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = DB_FILE + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify(db(), null, 2), "utf8");
-    fs.renameSync(tmp, DB_FILE);
-  } catch {
-    // best-effort persistence; in-memory state remains correct for the session
-  }
-}
-
-export function resetWorld(): void {
-  g.__jc_db = seed(emptyDB());
-  save();
-}
+// Supabase-backed store. Every call site uses the helpers below, not the storage
+// mechanism. Coffee spots live in application code (lib/cities.ts), so there is
+// no spots table here. All functions are async.
 
 export const id = (prefix: string) =>
   `${prefix}-${crypto.randomBytes(6).toString("hex")}`;
 
+// --- row <-> object mappers ---------------------------------------------
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function rowToUser(r: any): User {
+  return {
+    id: r.id,
+    email: r.email ?? undefined,
+    name: r.name ?? "",
+    age: Number(r.age),
+    pseudonym: r.pseudonym ?? "",
+    iAm: r.i_am ?? "",
+    lookingTo: r.looking_to ?? "",
+    avatar: r.avatar ?? { hue: 0, shape: 0 },
+    photoUrl: r.photo_url ?? undefined,
+    verified: Boolean(r.verified),
+    city: r.city ?? "austin",
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    availability: r.availability ?? "today",
+    isDemo: Boolean(r.is_demo),
+    openness: Number(r.openness),
+    createdAt: Number(r.created_at),
+  };
+}
+
+function userToRow(u: User) {
+  return {
+    id: u.id,
+    email: u.email ?? null,
+    name: u.name,
+    age: u.age,
+    pseudonym: u.pseudonym,
+    i_am: u.iAm,
+    looking_to: u.lookingTo,
+    avatar: u.avatar,
+    photo_url: u.photoUrl ?? null,
+    verified: Boolean(u.verified),
+    city: u.city,
+    lat: u.lat,
+    lng: u.lng,
+    availability: u.availability,
+    is_demo: u.isDemo,
+    openness: u.openness,
+    created_at: u.createdAt,
+  };
+}
+
+function rowToSearch(r: any): SearchState {
+  return {
+    userId: r.user_id,
+    challenge: Number(r.challenge),
+    passed: r.passed ?? [],
+    interested: r.interested ?? [],
+    currentCandidateId: r.current_candidate_id ?? undefined,
+    updatedAt: Number(r.updated_at),
+  };
+}
+
+function searchToRow(s: SearchState) {
+  return {
+    user_id: s.userId,
+    challenge: s.challenge,
+    passed: s.passed,
+    interested: s.interested,
+    current_candidate_id: s.currentCandidateId ?? null,
+    updated_at: s.updatedAt,
+  };
+}
+
+function rowToMatch(r: any): Match {
+  return {
+    id: r.id,
+    aId: r.a_id,
+    bId: r.b_id,
+    createdAt: Number(r.created_at),
+    expiresAt: Number(r.expires_at),
+    coffeeSpotId: r.coffee_spot_id,
+    status: r.status,
+    met: r.met ?? {},
+    challengeAtMatch: Number(r.challenge_at_match),
+  };
+}
+
+function matchToRow(m: Match) {
+  return {
+    id: m.id,
+    a_id: m.aId,
+    b_id: m.bId,
+    created_at: m.createdAt,
+    expires_at: m.expiresAt,
+    coffee_spot_id: m.coffeeSpotId,
+    status: m.status,
+    met: m.met,
+    challenge_at_match: m.challengeAtMatch,
+  };
+}
+
+function rowToMessage(r: any): Message {
+  return { id: r.id, matchId: r.match_id, fromId: r.from_id, body: r.body, at: Number(r.at) };
+}
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// --- Seeding -------------------------------------------------------------
+const g = globalThis as unknown as { __jc_seeded?: Promise<void> };
+
+async function doSeed(): Promise<void> {
+  const sb = supabase();
+  const { data } = await sb.from("users").select("id").eq("is_demo", true).limit(1);
+  if (data && data.length > 0) return; // already seeded
+  const rows = buildSeedUsers().map(userToRow);
+  await sb.from("users").upsert(rows, { onConflict: "id" });
+}
+
+/** Ensure the demo world exists. Idempotent; safe to call on every request. */
+export function ensureSeeded(): Promise<void> {
+  if (!g.__jc_seeded) {
+    g.__jc_seeded = doSeed().catch((e) => {
+      g.__jc_seeded = undefined; // allow retry on next call
+      throw e;
+    });
+  }
+  return g.__jc_seeded;
+}
+
+export async function resetWorld(): Promise<void> {
+  const sb = supabase();
+  await Promise.all([
+    sb.from("messages").delete().neq("id", ""),
+    sb.from("interests").delete().neq("from_id", ""),
+    sb.from("blocks").delete().neq("from_id", ""),
+    sb.from("reports").delete().neq("id", ""),
+    sb.from("matches").delete().neq("id", ""),
+    sb.from("searches").delete().neq("user_id", ""),
+  ]);
+  await sb.from("users").delete().neq("id", "");
+  g.__jc_seeded = undefined;
+  await ensureSeeded();
+}
+
 // --- Users ---------------------------------------------------------------
-export function getUser(userId: string): User | undefined {
-  return db().users[userId];
+export async function getUser(userId: string): Promise<User | undefined> {
+  const { data } = await supabase().from("users").select("*").eq("id", userId).maybeSingle();
+  return data ? rowToUser(data) : undefined;
 }
-export function allUsers(): User[] {
-  return Object.values(db().users);
+export async function allUsers(): Promise<User[]> {
+  const { data } = await supabase().from("users").select("*");
+  return (data ?? []).map(rowToUser);
 }
-export function getUserByEmail(email: string): User | undefined {
+export async function getUserByEmail(email: string): Promise<User | undefined> {
   const target = email.trim().toLowerCase();
-  return Object.values(db().users).find((u) => u.email === target);
+  const { data } = await supabase().from("users").select("*").eq("email", target).maybeSingle();
+  return data ? rowToUser(data) : undefined;
 }
-export function upsertUser(u: User): User {
-  db().users[u.id] = u;
-  save();
+export async function upsertUser(u: User): Promise<User> {
+  await supabase().from("users").upsert(userToRow(u), { onConflict: "id" });
   return u;
 }
 
 // --- Search --------------------------------------------------------------
-export function getSearch(userId: string): SearchState {
-  const d = db();
-  if (!d.searches[userId]) {
-    d.searches[userId] = {
-      userId,
-      challenge: 0.5,
-      passed: [],
-      interested: [],
-      updatedAt: Date.now(),
-    };
-  }
-  return d.searches[userId];
+export async function getSearch(userId: string): Promise<SearchState> {
+  const { data } = await supabase().from("searches").select("*").eq("user_id", userId).maybeSingle();
+  if (data) return rowToSearch(data);
+  const fresh: SearchState = {
+    userId,
+    challenge: 0.5,
+    passed: [],
+    interested: [],
+    updatedAt: Date.now(),
+  };
+  await setSearch(fresh);
+  return fresh;
 }
-export function setSearch(s: SearchState): void {
+export async function setSearch(s: SearchState): Promise<void> {
   s.updatedAt = Date.now();
-  db().searches[s.userId] = s;
-  save();
+  await supabase().from("searches").upsert(searchToRow(s), { onConflict: "user_id" });
 }
 
 // --- Interest / matching -------------------------------------------------
-export function recordInterest(fromId: string, toId: string): void {
-  const d = db();
-  if (!d.interests.some((i) => i.fromId === fromId && i.toId === toId)) {
-    d.interests.push({ fromId, toId, at: Date.now() });
+export async function recordInterest(fromId: string, toId: string): Promise<void> {
+  await supabase()
+    .from("interests")
+    .upsert({ from_id: fromId, to_id: toId, at: Date.now() }, {
+      onConflict: "from_id,to_id",
+      ignoreDuplicates: true,
+    });
+  const s = await getSearch(fromId);
+  if (!s.interested.includes(toId)) {
+    s.interested.push(toId);
+    await setSearch(s);
   }
-  const s = getSearch(fromId);
-  if (!s.interested.includes(toId)) s.interested.push(toId);
-  setSearch(s);
 }
-export function hasInterest(fromId: string, toId: string): boolean {
-  return db().interests.some((i) => i.fromId === fromId && i.toId === toId);
+export async function hasInterest(fromId: string, toId: string): Promise<boolean> {
+  const { data } = await supabase()
+    .from("interests")
+    .select("from_id")
+    .eq("from_id", fromId)
+    .eq("to_id", toId)
+    .maybeSingle();
+  return Boolean(data);
 }
 
-export function createMatch(m: Match): Match {
-  db().matches[m.id] = m;
-  save();
+export async function createMatch(m: Match): Promise<Match> {
+  await supabase().from("matches").upsert(matchToRow(m), { onConflict: "id" });
   return m;
 }
-export function getMatch(matchId: string): Match | undefined {
-  return db().matches[matchId];
+export async function getMatch(matchId: string): Promise<Match | undefined> {
+  const { data } = await supabase().from("matches").select("*").eq("id", matchId).maybeSingle();
+  return data ? rowToMatch(data) : undefined;
 }
-export function updateMatch(m: Match): void {
-  db().matches[m.id] = m;
-  save();
+export async function updateMatch(m: Match): Promise<void> {
+  await supabase().from("matches").upsert(matchToRow(m), { onConflict: "id" });
 }
-export function matchesForUser(userId: string): Match[] {
-  return Object.values(db().matches)
-    .filter((m) => m.aId === userId || m.bId === userId)
-    .sort((a, b) => b.createdAt - a.createdAt);
+export async function matchesForUser(userId: string): Promise<Match[]> {
+  const { data } = await supabase()
+    .from("matches")
+    .select("*")
+    .or(`a_id.eq.${userId},b_id.eq.${userId}`)
+    .order("created_at", { ascending: false });
+  return (data ?? []).map(rowToMatch);
 }
-export function existingMatchBetween(
-  a: string,
-  b: string,
-): Match | undefined {
-  return Object.values(db().matches).find(
-    (m) =>
-      (m.aId === a && m.bId === b) || (m.aId === b && m.bId === a),
-  );
+export async function existingMatchBetween(a: string, b: string): Promise<Match | undefined> {
+  const { data } = await supabase()
+    .from("matches")
+    .select("*")
+    .or(`and(a_id.eq.${a},b_id.eq.${b}),and(a_id.eq.${b},b_id.eq.${a})`)
+    .limit(1)
+    .maybeSingle();
+  return data ? rowToMatch(data) : undefined;
 }
 
 // --- Messages ------------------------------------------------------------
-export function addMessage(m: Message): Message {
-  db().messages.push(m);
-  save();
+export async function addMessage(m: Message): Promise<Message> {
+  await supabase().from("messages").insert({
+    id: m.id,
+    match_id: m.matchId,
+    from_id: m.fromId,
+    body: m.body,
+    at: m.at,
+  });
   return m;
 }
-export function messagesForMatch(matchId: string): Message[] {
-  return db()
-    .messages.filter((m) => m.matchId === matchId)
-    .sort((a, b) => a.at - b.at);
+export async function messagesForMatch(matchId: string): Promise<Message[]> {
+  const { data } = await supabase()
+    .from("messages")
+    .select("*")
+    .eq("match_id", matchId)
+    .order("at", { ascending: true });
+  return (data ?? []).map(rowToMessage);
 }
 
 // --- Safety --------------------------------------------------------------
-export function addReport(r: Report): void {
-  db().reports.push(r);
-  save();
+export async function addReport(r: Report): Promise<void> {
+  await supabase().from("reports").insert({
+    id: r.id,
+    from_id: r.fromId,
+    target_id: r.targetId,
+    reason: r.reason,
+    context: r.context,
+    at: r.at,
+  });
 }
-export function addBlock(b: Block): void {
-  const d = db();
-  if (!d.blocks.some((x) => x.fromId === b.fromId && x.targetId === b.targetId)) {
-    d.blocks.push(b);
-  }
-  save();
+export async function addBlock(b: Block): Promise<void> {
+  await supabase()
+    .from("blocks")
+    .upsert(
+      { from_id: b.fromId, target_id: b.targetId, at: b.at },
+      { onConflict: "from_id,target_id", ignoreDuplicates: true },
+    );
 }
-export function blockedPairIds(userId: string): Set<string> {
+export async function blockedPairIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase()
+    .from("blocks")
+    .select("from_id,target_id")
+    .or(`from_id.eq.${userId},target_id.eq.${userId}`);
   const out = new Set<string>();
-  for (const b of db().blocks) {
-    if (b.fromId === userId) out.add(b.targetId);
-    if (b.targetId === userId) out.add(b.fromId);
+  for (const b of data ?? []) {
+    if (b.from_id === userId) out.add(b.target_id);
+    if (b.target_id === userId) out.add(b.from_id);
   }
   return out;
-}
-
-// --- Spots ---------------------------------------------------------------
-export function getSpot(spotId: string) {
-  return db().spots.find((s) => s.id === spotId);
-}
-export function spotsInCity(city: string) {
-  return db().spots.filter((s) => s.city === city);
-}
-/** Persist a (possibly generated) spot so it resolves on later reads. */
-export function addSpot(spot: CoffeeSpot): CoffeeSpot {
-  const d = db();
-  const existing = d.spots.find((s) => s.id === spot.id);
-  if (existing) return existing;
-  d.spots.push(spot);
-  save();
-  return spot;
 }

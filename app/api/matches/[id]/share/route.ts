@@ -9,7 +9,7 @@ export async function GET(
   const uid = await currentUserId();
   if (!uid) return unauthorized();
   const { id } = await params;
-  const text = sharePlans(uid, id);
+  const text = await sharePlans(uid, id);
   if (!text) return Response.json({ error: "not found" }, { status: 404 });
   return Response.json({ text });
 }

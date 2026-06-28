@@ -10,7 +10,7 @@ export async function POST() {
   const uid = await currentUserId();
   if (!uid) return unauthorized();
 
-  const user = db.getUser(uid);
+  const user = await db.getUser(uid);
   if (!user) return unauthorized();
   if (!user.photoUrl)
     return Response.json(
@@ -19,6 +19,6 @@ export async function POST() {
     );
 
   user.verified = true;
-  db.upsertUser(user);
+  await db.upsertUser(user);
   return Response.json({ user: selfView(user) });
 }

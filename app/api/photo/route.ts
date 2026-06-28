@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   if (file.size > MAX_UPLOAD_BYTES)
     return Response.json({ error: "image must be under 5 MB" }, { status: 400 });
 
-  const user = db.getUser(uid);
+  const user = await db.getUser(uid);
   if (!user) return unauthorized();
 
   const buf = Buffer.from(await file.arrayBuffer());
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   user.photoUrl = `/api/photo/${filename}`;
   // A brand-new photo resets verification — you re-verify the current photo.
   user.verified = false;
-  db.upsertUser(user);
+  await db.upsertUser(user);
 
   return Response.json({ user: selfView(user) });
 }

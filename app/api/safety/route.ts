@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   if (!targetId) return Response.json({ error: "targetId required" }, { status: 400 });
 
   if (action === "report") {
-    reportUser(
+    await reportUser(
       uid,
       targetId,
       String(body.reason ?? "unspecified").slice(0, 80),
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, blocked: true, reported: true });
   }
   if (action === "block") {
-    blockUser(uid, targetId);
+    await blockUser(uid, targetId);
     return Response.json({ ok: true, blocked: true });
   }
   return Response.json({ error: "unknown action" }, { status: 400 });

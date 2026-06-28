@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "tell us what you're looking for" }, { status: 400 });
 
   const existingId = await getSessionUserId();
-  const existing = existingId ? db.getUser(existingId) : undefined;
+  const existing = existingId ? await db.getUser(existingId) : undefined;
 
   const city = getCity(cityKey);
   // Honor real device coordinates if provided; on edit, keep the saved location
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     createdAt: existing?.createdAt ?? Date.now(),
   };
 
-  db.upsertUser(user);
+  await db.upsertUser(user);
   await startSession(user.id);
   return Response.json({ user: selfView(user) });
 }
