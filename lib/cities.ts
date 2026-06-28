@@ -75,6 +75,13 @@ export const COFFEE_SPOTS: CoffeeSpot[] = [
   { id: "nyc-3", name: "Stumptown (Ace Hotel)", kind: "cafe", city: "nyc", lat: 40.745, lng: -73.988, blurb: "Central, public lobby seating nearby." },
   { id: "nyc-4", name: "Birch Coffee (Gramercy)", kind: "cafe", city: "nyc", lat: 40.739, lng: -73.984, blurb: "Calm Gramercy room, good for talking." },
   { id: "nyc-5", name: "Variety Coffee (East Village)", kind: "cafe", city: "nyc", lat: 40.727, lng: -73.984, blurb: "Quick downtown stop, lots of seats." },
+  { id: "nyc-6", name: "Think Coffee (Mercer St)", kind: "cafe", city: "nyc", lat: 40.727, lng: -73.995, blurb: "Roomy NoHo cafe, easy to find." },
+  { id: "nyc-7", name: "La Colombe (TriBeCa)", kind: "cafe", city: "nyc", lat: 40.717, lng: -74.009, blurb: "Bright TriBeCa corner, lots of light." },
+  { id: "nyc-8", name: "Gregorys Coffee (FiDi)", kind: "cafe", city: "nyc", lat: 40.706, lng: -74.009, blurb: "Reliable downtown spot near Wall St." },
+  { id: "nyc-9", name: "Black Fox Coffee (FiDi)", kind: "cafe", city: "nyc", lat: 40.705, lng: -74.008, blurb: "Polished FiDi cafe, plenty of seating." },
+  { id: "nyc-10", name: "Joe Coffee (Union Square)", kind: "cafe", city: "nyc", lat: 40.736, lng: -73.991, blurb: "Central Union Square walk-up." },
+  { id: "nyc-11", name: "Blue Bottle (Bryant Park)", kind: "cafe", city: "nyc", lat: 40.754, lng: -73.984, blurb: "Midtown, next to the public park." },
+  { id: "nyc-12", name: "Brooklyn Public Library — Central", kind: "library", city: "nyc", lat: 40.672, lng: -73.968, blurb: "Grand public library at Grand Army Plaza." },
 
   // SF
   { id: "sf-1", name: "Ferry Building — Blue Bottle", kind: "cafe", city: "sf", lat: 37.795, lng: -122.393, blurb: "Public marketplace, very busy." },

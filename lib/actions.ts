@@ -4,6 +4,7 @@ import { rankCandidates, computeSignals } from "./matching";
 import { enhanceRationale } from "./claude";
 import { haversineMi, midpoint } from "./geo";
 import { publish } from "./events";
+import { COFFEE_SPOTS } from "./cities";
 
 // ---- serialization views ------------------------------------------------
 
@@ -136,61 +137,23 @@ function demoSaysYes(cand: User, viewer: User): boolean {
   return hashUnit(`${cand.id}->${viewer.id}`) < cand.openness;
 }
 
-// A suggested spot should be genuinely walkable from the midpoint of the two
-// people. If the nearest curated public place is farther than this, we generate
-// a neighborhood cafe right at the midpoint instead of sending them across town.
-const WALKABLE_MI = 1.0;
-
-const NEIGHBORHOOD_NAMES = [
-  "Neighborhood Coffee Co.",
-  "Corner Cup",
-  "The Local Roastery",
-  "Open Door Coffee",
-  "Common Grounds",
-  "Daybreak Coffee Bar",
-  "Halfway Espresso",
-  "Meeting Point Coffee",
-];
-
-function hashInt(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 /**
- * A stable, public-by-default cafe placed at the midpoint, used only when no
- * curated spot is within walking distance. In production this is where a places
- * API (Google/Foursquare) returns a real nearby cafe; the shape is identical so
- * it's a drop-in swap.
+ * Suggest the closest *real*, public, curated place to the midpoint of the two
+ * people. Prefers spots in their city; if neither city has any (e.g. someone is
+ * outside our launch metros), falls back to the nearest spot anywhere. We never
+ * invent a venue — a real place slightly farther beats a fake one next door.
+ * The production upgrade is a places API (Google/Foursquare) keyed off the
+ * midpoint, which returns real nearby cafes with the same `CoffeeSpot` shape.
  */
-function neighborhoodSpotAt(lat: number, lng: number): CoffeeSpot {
-  const key = `${lat.toFixed(3)},${lng.toFixed(3)}`;
-  const name = NEIGHBORHOOD_NAMES[hashInt(key) % NEIGHBORHOOD_NAMES.length];
-  return {
-    id: `spot-near-${key}`,
-    name,
-    kind: "cafe",
-    city: "",
-    lat,
-    lng,
-    blurb: "A public cafe a few minutes from you both — meet where it's easy.",
-  };
-}
-
-/** Pick the closest public place to the midpoint, falling back to a walkable
- *  neighborhood cafe when nothing curated is close. */
 function chooseSpot(a: User, b: User): CoffeeSpot {
   const mid = midpoint(a.lat, a.lng, b.lat, b.lng);
-  const pool =
+  const local =
     a.city === b.city
       ? db.spotsInCity(a.city)
       : [...db.spotsInCity(a.city), ...db.spotsInCity(b.city)];
+  const pool = local.length ? local : COFFEE_SPOTS;
 
-  let best: CoffeeSpot | undefined;
+  let best = pool[0];
   let bestD = Infinity;
   for (const s of pool) {
     const d = haversineMi(mid.lat, mid.lng, s.lat, s.lng);
@@ -198,10 +161,6 @@ function chooseSpot(a: User, b: User): CoffeeSpot {
       bestD = d;
       best = s;
     }
-  }
-
-  if (!best || bestD > WALKABLE_MI) {
-    return db.addSpot(neighborhoodSpotAt(mid.lat, mid.lng));
   }
   return best;
 }
