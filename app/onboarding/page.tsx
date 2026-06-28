@@ -13,7 +13,7 @@ export default function Onboarding() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
-  const [city, setCity] = useState("austin");
+  const [city, setCity] = useState("champaign");
   const [iAm, setIAm] = useState("");
   const [lookingTo, setLookingTo] = useState("");
   const [hue, setHue] = useState(0);

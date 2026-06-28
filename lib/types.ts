@@ -4,17 +4,62 @@
 
 export type AvailabilityWindow = "now" | "today" | "weekend";
 
+export const AVAILABILITY_DURATIONS = [30, 60, 120] as const;
+export type AvailabilityDuration = (typeof AVAILABILITY_DURATIONS)[number];
+export const DEFAULT_AVAILABILITY_MINUTES: AvailabilityDuration = 60;
+
+export const DURATION_LABELS: Record<AvailabilityDuration, string> = {
+  30: "30 min",
+  60: "1 hr",
+  120: "2 hrs",
+};
+
 export const AVAILABILITY_LABELS: Record<AvailabilityWindow, string> = {
-  now: "free in the next couple hours",
+  now: "free right now",
   today: "free later today",
   weekend: "free this weekend",
 };
 
 export const AVAILABILITY_SHORT: Record<AvailabilityWindow, string> = {
-  now: "next 2 hrs",
+  now: "right now",
   today: "today",
   weekend: "this weekend",
 };
+
+/** Short labels for the when-picker on the find page. */
+export const AVAILABILITY_PICKER: Record<AvailabilityWindow, string> = {
+  now: "right now",
+  today: "today",
+  weekend: "this weekend",
+};
+
+export function normalizeDurationMinutes(m: unknown): AvailabilityDuration {
+  const n = Number(m);
+  if (n === 30 || n === 60 || n === 120) return n;
+  return DEFAULT_AVAILABILITY_MINUTES;
+}
+
+export function formatAvailabilityShort(
+  window: AvailabilityWindow,
+  minutes?: number,
+): string {
+  if (window === "now") {
+    const m = normalizeDurationMinutes(minutes);
+    return `${AVAILABILITY_SHORT.now} · ${DURATION_LABELS[m]}`;
+  }
+  return AVAILABILITY_SHORT[window];
+}
+
+export function formatAvailabilityLabel(
+  window: AvailabilityWindow,
+  minutes?: number,
+): string {
+  if (window === "now") {
+    const m = normalizeDurationMinutes(minutes);
+    return `free right now for ${DURATION_LABELS[m]}`;
+  }
+  return AVAILABILITY_LABELS[window];
+}
 
 export interface Avatar {
   // Deterministic, brand-colored geometric avatar. No external image hosting for MVP.
@@ -42,6 +87,8 @@ export interface User {
   lat: number;
   lng: number;
   availability: AvailabilityWindow;
+  /** How long the user is free when availability is "now". */
+  availabilityMinutes?: AvailabilityDuration;
   // System
   isDemo: boolean;
   openness: number; // 0..1 — for demo users, how readily they say "yes" back
@@ -57,11 +104,13 @@ export interface Candidate {
   lookingTo: string;
   avatar: Avatar;
   availability: AvailabilityWindow;
+  availabilityMinutes?: AvailabilityDuration;
   distanceMi: number;
   challengeFit: number; // 0..1 how well this candidate matches the requested challenge dial
   score: number; // overall ranking score (debug / internal)
   rationale: string; // "why you two"
   sharedTopics: string[];
+  conversationStarters: string[]; // 3-5 things they could actually talk about
   intentNote: string; // short complementarity note
 }
 

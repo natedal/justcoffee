@@ -15,6 +15,8 @@ export const CITIES: City[] = [
   { key: "nashville", label: "Nashville, TN", lat: 36.1627, lng: -86.7816 },
   { key: "denver", label: "Denver, CO", lat: 39.7392, lng: -104.9903 },
   { key: "madison", label: "Madison, WI", lat: 43.0731, lng: -89.4012 },
+  { key: "urbana", label: "Urbana, IL", lat: 40.1106, lng: -88.2073 },
+  { key: "champaign", label: "Champaign, IL", lat: 40.1164, lng: -88.2434 },
   { key: "nyc", label: "New York, NY", lat: 40.7128, lng: -74.006 },
   { key: "sf", label: "San Francisco, CA", lat: 37.7749, lng: -122.4194 },
 ];
@@ -68,6 +70,19 @@ export const COFFEE_SPOTS: CoffeeSpot[] = [
   { id: "msn-2", name: "Barriques", kind: "cafe", city: "madison", lat: 43.073, lng: -89.401, blurb: "Central, relaxed, easy to find." },
   { id: "msn-3", name: "Madison Central Library Cafe", kind: "library", city: "madison", lat: 43.074, lng: -89.39, blurb: "Quiet public space downtown." },
   { id: "msn-4", name: "Crescendo Espresso Bar", kind: "cafe", city: "madison", lat: 43.085, lng: -89.355, blurb: "Friendly near-east cafe." },
+
+  // Urbana
+  { id: "urb-1", name: "Cafe Kopi", kind: "cafe", city: "urbana", lat: 40.112, lng: -88.211, blurb: "Downtown Urbana staple, relaxed seating." },
+  { id: "urb-2", name: "Espresso Royale (Urbana)", kind: "cafe", city: "urbana", lat: 40.111, lng: -88.228, blurb: "Central Urbana, easy to find a table." },
+  { id: "urb-3", name: "Urbana Free Library", kind: "library", city: "urbana", lat: 40.111, lng: -88.207, blurb: "Quiet public library downtown." },
+  { id: "urb-4", name: "The Courier Cafe", kind: "cafe", city: "urbana", lat: 40.11, lng: -88.209, blurb: "Cozy Main St cafe, good for conversation." },
+
+  // Champaign
+  { id: "chm-1", name: "Pera Coffee & Tea", kind: "cafe", city: "champaign", lat: 40.117, lng: -88.244, blurb: "Bright downtown cafe with plenty of seats." },
+  { id: "chm-2", name: "A PourHaus Coffee", kind: "cafe", city: "champaign", lat: 40.118, lng: -88.249, blurb: "West Side roaster, roomy and casual." },
+  { id: "chm-3", name: "Champaign Public Library", kind: "library", city: "champaign", lat: 40.117, lng: -88.244, blurb: "Central public library, calm and open." },
+  { id: "chm-4", name: "The Courier Cafe (Champaign)", kind: "cafe", city: "champaign", lat: 40.116, lng: -88.235, blurb: "Downtown Champaign, lots of foot traffic." },
+  { id: "chm-5", name: "The Good Coffee", kind: "cafe", city: "champaign", lat: 40.115, lng: -88.241, blurb: "Downtown Champaign, relaxed and public." },
 
   // NYC
   { id: "nyc-1", name: "Bryant Park Reading Room", kind: "public", city: "nyc", lat: 40.753, lng: -73.983, blurb: "Open-air public space in midtown." },

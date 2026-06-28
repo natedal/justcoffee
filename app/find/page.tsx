@@ -9,17 +9,18 @@ import { MatchCard } from "@/components/MatchCard";
 import { ChallengeSlider } from "@/components/ChallengeSlider";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { jget, jpost } from "@/components/api";
-import type { Candidate, AvailabilityWindow } from "@/lib/types";
+import type { Candidate, AvailabilityWindow, AvailabilityDuration } from "@/lib/types";
+import {
+  AVAILABILITY_DURATIONS,
+  AVAILABILITY_PICKER,
+  DEFAULT_AVAILABILITY_MINUTES,
+  DURATION_LABELS,
+} from "@/lib/types";
 import type { SelfViewData, MatchViewData } from "@/lib/actions";
 
 type Step = "idle" | "searching" | "card" | "empty" | "matched";
 
 const AVAIL: AvailabilityWindow[] = ["now", "today", "weekend"];
-const AVAIL_LABEL: Record<AvailabilityWindow, string> = {
-  now: "next 2 hrs",
-  today: "today",
-  weekend: "this weekend",
-};
 
 export default function Find() {
   const router = useRouter();
@@ -27,6 +28,9 @@ export default function Find() {
   const [aiOn, setAiOn] = useState(false);
   const [challenge, setChallenge] = useState(0.5);
   const [availability, setAvailability] = useState<AvailabilityWindow>("now");
+  const [availabilityMinutes, setAvailabilityMinutes] = useState<AvailabilityDuration>(
+    DEFAULT_AVAILABILITY_MINUTES,
+  );
   const [step, setStep] = useState<Step>("idle");
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [match, setMatch] = useState<MatchViewData | null>(null);
@@ -41,6 +45,9 @@ export default function Find() {
       else {
         setMe(d.user);
         setAvailability(d.user.availability);
+        if (d.user.availabilityMinutes) {
+          setAvailabilityMinutes(d.user.availabilityMinutes);
+        }
         setAiOn(d.aiEnabled);
       }
     });
@@ -57,6 +64,7 @@ export default function Find() {
     const d = await jpost<{ candidate: Candidate | null }>("/api/search", {
       challenge,
       availability,
+      ...(availability === "now" ? { availabilityMinutes } : {}),
     });
     if (d.candidate) {
       setCandidate(d.candidate);
@@ -154,10 +162,33 @@ export default function Find() {
                         : "border-tan/60 bg-white/50 text-ink/70 hover:bg-tan/15"
                     }`}
                   >
-                    {AVAIL_LABEL[a]}
+                    {AVAILABILITY_PICKER[a]}
                   </button>
                 ))}
               </div>
+              {availability === "now" && (
+                <div className="mt-4">
+                  <span className="text-sm font-semibold text-ink/70">
+                    how long do you have?
+                  </span>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {AVAILABILITY_DURATIONS.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setAvailabilityMinutes(m)}
+                        className={`rounded-2xl border px-2 py-2.5 text-sm font-semibold transition ${
+                          availabilityMinutes === m
+                            ? "border-teal bg-teal/10 text-teal"
+                            : "border-tan/60 bg-white/50 text-ink/70 hover:bg-tan/15"
+                        }`}
+                      >
+                        {DURATION_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <ChallengeSlider value={challenge} onChange={setChallenge} />
             <button className="btn-primary w-full" onClick={find}>

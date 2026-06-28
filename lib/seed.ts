@@ -1,4 +1,5 @@
 import type { User } from "./types";
+import { AVAILABILITY_DURATIONS } from "./types";
 import { getCity } from "./cities";
 import { jitter } from "./geo";
 
@@ -193,6 +194,10 @@ export function buildSeedUsers(): User[] {
       lat,
       lng,
       availability: p.availability,
+      availabilityMinutes:
+        p.availability === "now"
+          ? AVAILABILITY_DURATIONS[i % AVAILABILITY_DURATIONS.length]
+          : undefined,
       isDemo: true,
       openness: p.openness,
       createdAt: now - (i + 1) * 60000,

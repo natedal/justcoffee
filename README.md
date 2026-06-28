@@ -38,8 +38,9 @@ This repo is a working MVP of that product.
 1. **Onboarding** — first name, age, an avatar **or a real photo (with an
    optional verification badge)**, two sentences ("I'm a…" / "I'm looking to…"),
    and where you are (city or device GPS). Your card is **editable any time**.
-2. **Before each search** — pick **when you're free** (next 2 hrs / today / this
-   weekend) and set the **challenge dial**: how far outside your bubble to go,
+2. **Before each search** — pick **when you're free** (right now / today / this
+   weekend). If you're free right now, say **how long you have** (30 min / 1 hr /
+   2 hrs). Set the **challenge dial**: how far outside your bubble to go,
    from *"someone like me"* to *"someone I'd never normally meet."*
 3. **Find someone** — the matcher returns one nearby person: a **blurred** avatar,
    a pseudonym, their two sentences, and a "why you two" note.
@@ -64,7 +65,7 @@ trusted contact, and it's 18+.
 `lib/matching.ts` scores every eligible person on five signals and ranks them:
 
 - **Distance** (haversine; capped to the same metro)
-- **Availability overlap** (now / today / this weekend)
+- **Availability overlap** (right now / today / this weekend; duration when right now)
 - **Topic overlap** of the two sentences (a small topic lexicon — politics, faith,
   parenting, building things, the planet, …)
 - **The challenge dial** — this is the key feature. Low challenge rewards *similar*

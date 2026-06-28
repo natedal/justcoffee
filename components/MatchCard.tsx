@@ -1,5 +1,5 @@
 import type { Candidate } from "@/lib/types";
-import { AVAILABILITY_SHORT } from "@/lib/types";
+import { formatAvailabilityShort } from "@/lib/types";
 import { Avatar } from "./Avatar";
 
 export function MatchCard({
@@ -32,7 +32,11 @@ export function MatchCard({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <span className="chip">{candidate.distanceMi} mi away</span>
             <span className="chip capitalize">
-              free {AVAILABILITY_SHORT[candidate.availability]}
+              free{" "}
+              {formatAvailabilityShort(
+                candidate.availability,
+                candidate.availabilityMinutes,
+              )}
             </span>
           </div>
         </div>
@@ -67,6 +71,23 @@ export function MatchCard({
                 {t}
               </span>
             ))}
+          </div>
+        )}
+        {candidate.conversationStarters.length > 0 && (
+          <div className="mt-4 border-t border-teal/15 pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-teal">
+              things you could get into
+            </p>
+            <ul className="serif mt-1.5 space-y-1 text-[15px] leading-snug text-espresso/85">
+              {candidate.conversationStarters.map((t) => (
+                <li key={t} className="flex gap-2">
+                  <span aria-hidden className="select-none text-teal/60">
+                    ·
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

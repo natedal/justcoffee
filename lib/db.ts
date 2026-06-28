@@ -36,6 +36,7 @@ function rowToUser(r: any): User {
     lat: Number(r.lat),
     lng: Number(r.lng),
     availability: r.availability ?? "today",
+    availabilityMinutes: r.availability_minutes ?? undefined,
     isDemo: Boolean(r.is_demo),
     openness: Number(r.openness),
     createdAt: Number(r.created_at),
@@ -58,6 +59,7 @@ function userToRow(u: User) {
     lat: u.lat,
     lng: u.lng,
     availability: u.availability,
+    availability_minutes: u.availabilityMinutes ?? null,
     is_demo: u.isDemo,
     openness: u.openness,
     created_at: u.createdAt,
@@ -123,7 +125,14 @@ function rowToMessage(r: any): Message {
 // --- Seeding -------------------------------------------------------------
 const g = globalThis as unknown as { __jc_seeded?: Promise<void> };
 
+/** Demo personas are seeded unless explicitly disabled (set for real-user tests
+ *  so people only ever match with each other, never with a bot). */
+export function seedDemoEnabled(): boolean {
+  return process.env.JUSTCOFFEE_SEED_DEMO !== "false";
+}
+
 async function doSeed(): Promise<void> {
+  if (!seedDemoEnabled()) return;
   const sb = supabase();
   const { data } = await sb.from("users").select("id").eq("is_demo", true).limit(1);
   if (data && data.length > 0) return; // already seeded
@@ -298,4 +307,60 @@ export async function blockedPairIds(userId: string): Promise<Set<string>> {
     if (b.target_id === userId) out.add(b.from_id);
   }
   return out;
+}
+
+// --- Admin / metrics -----------------------------------------------------
+/** Aggregate snapshot of the test, for the protected /api/admin/stats endpoint. */
+export async function stats() {
+  const sb = supabase();
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const count = async (table: string, build?: (q: any) => any): Promise<number> => {
+    let q = sb.from(table).select("*", { count: "exact", head: true });
+    if (build) q = build(q);
+    const { count: c } = await q;
+    return c ?? 0;
+  };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const [
+    realUsers,
+    onboarded,
+    withPhoto,
+    verified,
+    totalMatches,
+    totalMessages,
+  ] = await Promise.all([
+    count("users", (q) => q.eq("is_demo", false)),
+    count("users", (q) => q.eq("is_demo", false).neq("name", "")),
+    count("users", (q) => q.eq("is_demo", false).not("photo_url", "is", null)),
+    count("users", (q) => q.eq("is_demo", false).eq("verified", true)),
+    count("matches"),
+    count("messages"),
+  ]);
+
+  const { data: matchRows } = await sb.from("matches").select("met");
+  let matchesWithAMessageMet = 0;
+  let metYes = 0;
+  for (const m of matchRows ?? []) {
+    const vals = Object.values((m.met ?? {}) as Record<string, string>);
+    if (vals.length) matchesWithAMessageMet++;
+    if (vals.includes("yes")) metYes++;
+  }
+
+  const { data: fromRows } = await sb.from("messages").select("from_id");
+  const distinctMessagers = new Set((fromRows ?? []).map((r) => r.from_id)).size;
+
+  return {
+    realUsers,
+    onboarded,
+    withPhoto,
+    verified,
+    totalMatches,
+    totalMessages,
+    distinctMessagers,
+    matchesAnsweredMet: matchesWithAMessageMet,
+    matchesMetYes: metYes,
+    demoSeeding: seedDemoEnabled(),
+    at: new Date().toISOString(),
+  };
 }

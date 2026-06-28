@@ -1,5 +1,9 @@
 import type { AvailabilityWindow, Candidate, User } from "./types";
-import { AVAILABILITY_LABELS, AVAILABILITY_SHORT } from "./types";
+import {
+  DEFAULT_AVAILABILITY_MINUTES,
+  formatAvailabilityLabel,
+  formatAvailabilityShort,
+} from "./types";
 import { haversineMi, formatDistance } from "./geo";
 import {
   detectIntent,
@@ -22,6 +26,12 @@ const AVAIL_COMPAT: Record<AvailabilityWindow, Record<AvailabilityWindow, number
   weekend: { now: 0.3, today: 0.4, weekend: 1 },
 };
 
+function durationCompat(a: number, b: number): number {
+  const overlap = Math.min(a, b);
+  const max = Math.max(a, b);
+  return max > 0 ? overlap / max : 1;
+}
+
 export interface MatchSignals {
   distanceMi: number;
   availability: number;
@@ -40,7 +50,12 @@ export function computeSignals(
   challenge: number,
 ): MatchSignals {
   const distanceMi = haversineMi(viewer.lat, viewer.lng, cand.lat, cand.lng);
-  const availability = AVAIL_COMPAT[viewer.availability][cand.availability];
+  let availability = AVAIL_COMPAT[viewer.availability][cand.availability];
+  if (viewer.availability === "now" && cand.availability === "now") {
+    const vMins = viewer.availabilityMinutes ?? DEFAULT_AVAILABILITY_MINUTES;
+    const cMins = cand.availabilityMinutes ?? DEFAULT_AVAILABILITY_MINUTES;
+    availability *= durationCompat(vMins, cMins);
+  }
 
   const vTopics = detectTopics(`${viewer.iAm} ${viewer.lookingTo}`);
   const cTopics = detectTopics(`${cand.iAm} ${cand.lookingTo}`);
@@ -124,8 +139,14 @@ function buildRationale(
   // Sentence 1 — logistics + common thread.
   const sameWindow = s.availability >= 0.99;
   const logistics = sameWindow
-    ? `You're both ${AVAILABILITY_LABELS[cand.availability]}, ${formatDistance(s.distanceMi)}.`
-    : `${name} is ${AVAILABILITY_SHORT[cand.availability]}, ${formatDistance(s.distanceMi)}.`;
+    ? `You're both ${formatAvailabilityLabel(
+        cand.availability,
+        cand.availability === "now" ? cand.availabilityMinutes : undefined,
+      )}, ${formatDistance(s.distanceMi)}.`
+    : `${name} is ${formatAvailabilityShort(
+        cand.availability,
+        cand.availability === "now" ? cand.availabilityMinutes : undefined,
+      )}, ${formatDistance(s.distanceMi)}.`;
 
   // Sentence 2 — intent complementarity.
   const intent = `${cap(intentPhrase(s.viewerIntent, "you", name))}; ${intentPhrase(
@@ -178,11 +199,14 @@ export function toCandidate(
     lookingTo: cand.lookingTo,
     avatar: cand.avatar,
     availability: cand.availability,
+    availabilityMinutes:
+      cand.availability === "now" ? cand.availabilityMinutes : undefined,
     distanceMi: Math.round(s.distanceMi * 10) / 10,
     challengeFit: Math.round(s.challengeFit * 100) / 100,
     score: Math.round(score(s) * 1000) / 1000,
     rationale,
     sharedTopics: sharedLabels,
+    conversationStarters: [], // filled by the AI layer (lib/claude) for the chosen candidate
     intentNote,
   };
 }

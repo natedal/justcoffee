@@ -84,6 +84,7 @@ export async function POST(req: Request) {
     lat: loc.lat,
     lng: loc.lng,
     availability,
+    availabilityMinutes: existing?.availabilityMinutes,
     isDemo: false,
     openness: 1,
     createdAt: existing?.createdAt ?? Date.now(),

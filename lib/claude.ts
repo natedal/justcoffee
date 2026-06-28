@@ -13,12 +13,42 @@ export function aiEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+export interface Rationale {
+  note: string; // the "why you two" note (1-2 sentences)
+  topics: string[]; // 3-5 concrete conversation starters for these two
+}
+
+/** Pull the first JSON object out of the model's text, tolerating code fences. */
+function parseRationale(text: string): Rationale | null {
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    const obj = JSON.parse(t.slice(start, end + 1));
+    const note = typeof obj.note === "string" ? obj.note.trim() : "";
+    const topics = Array.isArray(obj.topics)
+      ? obj.topics
+          .filter((x: unknown): x is string => typeof x === "string")
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+    if (!note) return null;
+    return { note, topics };
+  } catch {
+    return null;
+  }
+}
+
 export async function enhanceRationale(
   viewer: User,
   cand: User,
   signals: MatchSignals,
   challenge: number,
-): Promise<string | null> {
+): Promise<Rationale | null> {
   if (!aiEnabled()) return null;
   try {
     // Lazy import so the dependency is never loaded on the no-key path.
@@ -30,8 +60,9 @@ export async function enhanceRationale(
     const system =
       "You write for justcoffee, an app that pairs nearby strangers for a single, " +
       "low-stakes coffee conversation (not dating). Voice: lowercase, warm, dry, " +
-      "concrete, never salesy. You write the one- to two-sentence 'why you two' note " +
-      "a user reads before deciding whether to meet. No names, no emoji, no hype.";
+      "concrete, never salesy. No emoji, no hype. You produce two things a user " +
+      "reads before deciding whether to meet: a short 'why you two' note, and a few " +
+      "concrete things they could actually talk about.";
     const prompt = [
       `The searcher wants someone ${dial}.`,
       `Searcher — is: "${viewer.iAm}" / wants: "${viewer.lookingTo}" (intent: ${INTENT_LABEL[signals.viewerIntent]}).`,
@@ -41,13 +72,17 @@ export async function enhanceRationale(
         ? `Shared ground: ${signals.sharedTopics.join(", ")}.`
         : `No obvious shared topic — find the human thread.`,
       "",
-      "Write the 'why you two' note (max 2 sentences). Refer to the candidate as " +
-        `"${cand.pseudonym}". Output only the note.`,
+      "Return ONLY a JSON object, no prose, no markdown fences:",
+      '{"note": string, "topics": string[]}',
+      `- "note": the 'why you two' note, max 2 sentences, refer to the candidate as "${cand.pseudonym}".`,
+      '- "topics": 3 to 5 specific, inviting conversation starters grounded in what these two ' +
+        "actually said — things to get into over coffee, not generic small talk. Each a short phrase " +
+        "(roughly 3-8 words), lowercase, no trailing punctuation.",
     ].join("\n");
 
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 200,
+      max_tokens: 400,
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
       system,
@@ -59,7 +94,7 @@ export async function enhanceRationale(
       .map((b) => b.text)
       .join("")
       .trim();
-    return text || null;
+    return parseRationale(text);
   } catch (err) {
     // Any failure (no network, bad key, bad model, rate limit) falls back to the
     // built-in rationale — but log it, so a misconfiguration doesn't hide silently.

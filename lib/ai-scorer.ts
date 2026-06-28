@@ -1,5 +1,5 @@
 import type { Candidate, User } from "./types";
-import { AVAILABILITY_SHORT } from "./types";
+import { formatAvailabilityShort } from "./types";
 import { detectIntent, INTENT_LABEL } from "./text";
 
 // The AI scorer. When ANTHROPIC_API_KEY is set, Claude ranks the (distance-
@@ -78,7 +78,7 @@ export async function aiRankCandidates(
         const shared = c.sharedTopics.length ? ` | shared ground: ${c.sharedTopics.join(", ")}` : "";
         return (
           `- id=${c.id} | "${c.pseudonym}" | is: "${c.iAm}" | wants: "${c.lookingTo}" | ` +
-          `${c.distanceMi} mi away | free ${AVAILABILITY_SHORT[c.availability]}${shared}`
+          `${c.distanceMi} mi away | free ${formatAvailabilityShort(c.availability, c.availabilityMinutes)}${shared}`
         );
       })
       .join("\n");

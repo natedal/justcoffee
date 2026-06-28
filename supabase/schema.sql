@@ -18,6 +18,7 @@ create table if not exists users (
   lat          double precision not null default 0,
   lng          double precision not null default 0,
   availability text not null default 'today',
+  availability_minutes integer,
   is_demo      boolean not null default false,
   openness     double precision not null default 1,
   created_at   bigint not null
@@ -89,3 +90,6 @@ alter table matches  enable row level security;
 alter table messages enable row level security;
 alter table reports  enable row level security;
 alter table blocks   enable row level security;
+
+-- If you already ran an earlier version of this schema, add:
+-- alter table users add column if not exists availability_minutes integer;

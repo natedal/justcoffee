@@ -1,11 +1,12 @@
 import * as db from "./db";
 import type { Candidate, CoffeeSpot, Match, User } from "./types";
+import { normalizeDurationMinutes } from "./types";
 import { rankCandidates, computeSignals } from "./matching";
 import { enhanceRationale } from "./claude";
 import { aiRankCandidates } from "./ai-scorer";
 import { haversineMi, midpoint } from "./geo";
 import { publish } from "./events";
-import { COFFEE_SPOTS, getSpotById, spotsForCity } from "./cities";
+import { COFFEE_SPOTS, getSpotById } from "./cities";
 
 // ---- serialization views ------------------------------------------------
 
@@ -29,6 +30,7 @@ export function selfView(u: User) {
     verified: Boolean(u.verified),
     city: u.city,
     availability: u.availability,
+    availabilityMinutes: u.availabilityMinutes ?? null,
     profileComplete: isProfileComplete(u),
   };
 }
@@ -87,15 +89,25 @@ export async function nextCandidateFor(
   userId: string,
   challenge: number,
   availability?: User["availability"],
+  availabilityMinutes?: number,
 ): Promise<Candidate | null> {
   await db.ensureSeeded();
   const viewer = await db.getUser(userId);
   if (!viewer) return null;
 
+  let changed = false;
   if (availability && availability !== viewer.availability) {
     viewer.availability = availability;
-    await db.upsertUser(viewer);
+    changed = true;
   }
+  if (availability === "now" && availabilityMinutes !== undefined) {
+    const mins = normalizeDurationMinutes(availabilityMinutes);
+    if (viewer.availabilityMinutes !== mins) {
+      viewer.availabilityMinutes = mins;
+      changed = true;
+    }
+  }
+  if (changed) await db.upsertUser(viewer);
 
   const search = await db.getSearch(userId);
   search.challenge = challenge;
@@ -103,9 +115,13 @@ export async function nextCandidateFor(
   // Deterministic pass: applies the hard constraints (distance, exclusions) and
   // produces a sensible pre-ranking. This is both the AI shortlist and the
   // fallback when the model is disabled or unavailable.
+  const everyone = await db.allUsers();
+  // When demo profiles are disabled (real-user tests), never surface a bot —
+  // even if some demo rows linger from an earlier run.
+  const pool = db.seedDemoEnabled() ? everyone : everyone.filter((u) => !u.isDemo);
   const ranked = rankCandidates(
     viewer,
-    await db.allUsers(),
+    pool,
     challenge,
     await excludeSetFor(userId),
   );
@@ -121,9 +137,9 @@ export async function nextCandidateFor(
   await db.setSearch(search);
   if (!top) return null;
 
-  // Write the winner's "why you two" note with Claude (no-op without a key,
-  // in which case the deterministic template stands). The scorer only returns
-  // numbers, so this is the single place prose is generated.
+  // Write the winner's "why you two" note + conversation starters with Claude
+  // (no-op without a key, in which case the deterministic template stands). The
+  // scorer only returns numbers, so this is the single place prose is generated.
   const cand = (await db.getUser(top.id))!;
   const ai = await enhanceRationale(
     viewer,
@@ -131,7 +147,10 @@ export async function nextCandidateFor(
     computeSignals(viewer, cand, challenge),
     challenge,
   );
-  if (ai) top.rationale = ai;
+  if (ai) {
+    top.rationale = ai.note;
+    top.conversationStarters = ai.topics;
+  }
   return top;
 }
 
@@ -162,15 +181,12 @@ function demoSaysYes(cand: User, viewer: User): boolean {
  */
 function chooseSpot(a: User, b: User): CoffeeSpot {
   const mid = midpoint(a.lat, a.lng, b.lat, b.lng);
-  const local =
-    a.city === b.city
-      ? spotsForCity(a.city)
-      : [...spotsForCity(a.city), ...spotsForCity(b.city)];
-  const pool = local.length ? local : COFFEE_SPOTS;
-
-  let best = pool[0];
+  // Distance is the source of truth (coordinates), so scan every curated spot
+  // and pick the closest to the midpoint — the `city` field can be stale for
+  // users located via GPS, and a nearby real cafe is what actually matters.
+  let best = COFFEE_SPOTS[0];
   let bestD = Infinity;
-  for (const s of pool) {
+  for (const s of COFFEE_SPOTS) {
     const d = haversineMi(mid.lat, mid.lng, s.lat, s.lng);
     if (d < bestD) {
       bestD = d;
