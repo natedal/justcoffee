@@ -1,6 +1,6 @@
 # justcoffee
 
-**have an hour to kill? meet a stranger for coffee.**
+**have an hour to kill? meet someone for coffee.**
 
 justcoffee pairs you with someone nearby who wants to talk about the same thing
 you do — defined broadly, and matched by AI. You write one sentence about who you

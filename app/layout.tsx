@@ -3,7 +3,7 @@ import "./globals.css";
 import { LiveNotifier } from "@/components/LiveNotifier";
 
 export const metadata: Metadata = {
-  title: "justcoffee — meet a stranger for coffee",
+  title: "justcoffee — meet someone for coffee",
   description:
     "Have an hour to kill? justcoffee pairs you with someone nearby who wants to talk about the same thing you do. Lower-stakes than a dating app. Just talk. Just coffee.",
 };

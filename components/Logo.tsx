@@ -1,4 +1,4 @@
-// The signature device: two overlapping rings (you + a stranger) with steam
+// The signature device: two overlapping rings (you + someone) with steam
 // rising from the shared space. Matches the campaign reference.
 
 export function Logo({

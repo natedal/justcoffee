@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         html: `
           <div style="font-family:Helvetica Neue,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;color:#281A12">
             <p style="font-size:28px;font-weight:700;margin:0 0 8px">justcoffee</p>
-            <p style="color:#6b5a4e;margin:0 0 32px;font-style:italic">meet a stranger for coffee.</p>
+            <p style="color:#6b5a4e;margin:0 0 32px;font-style:italic">meet someone for coffee.</p>
             <p style="margin:0 0 24px">tap the button below to sign in. this link expires in 15 minutes and can only be used once.</p>
             <a href="${link}"
                style="display:inline-block;background:#15625C;color:#F0E7D5;text-decoration:none;font-weight:700;padding:14px 28px;border-radius:999px;font-size:16px">

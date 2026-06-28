@@ -4,7 +4,7 @@ import type { Config } from "tailwindcss";
  * justcoffee brand system (from the campaign reference):
  *   palette — paper / ink / teal / terracotta / tan / espresso
  *   type    — Helvetica Neue (sans) + Georgia italic (serif accent)
- *   device  — two overlapping rings (you + a stranger) with rising steam
+ *   device  — two overlapping rings (you + someone) with rising steam
  */
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],

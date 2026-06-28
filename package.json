@@ -2,7 +2,7 @@
   "name": "justcoffee",
   "version": "0.1.0",
   "private": true,
-  "description": "justcoffee — meet a stranger for coffee. AI-paired, in-person conversation.",
+  "description": "justcoffee — meet someone for coffee. AI-paired, in-person conversation.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -31,7 +31,7 @@ export default function Landing() {
 
         <p className="serif mt-8 text-lg text-espresso/70">have an hour to kill?</p>
         <h1 className="mt-2 text-5xl font-bold leading-[1.05] tracking-tight">
-          meet a stranger
+          meet someone
           <br />
           for coffee.
         </h1>
