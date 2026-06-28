@@ -14,9 +14,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "enter a valid email" }, { status: 400 });
 
   const token = createToken(email);
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
-  const link = `${appUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
+
+  // Derive the base URL from the incoming request so the link always points
+  // to the domain the user actually hit (works behind proxies, on Railway, etc.)
+  // Fall back to the explicit env var only if headers are unavailable.
+  const reqUrl = new URL(req.url);
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const baseUrl = configuredUrl ?? `${reqUrl.protocol}//${reqUrl.host}`;
+  const link = `${baseUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
 
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.JUSTCOFFEE_EMAIL_FROM;
