@@ -37,14 +37,23 @@ export async function getSessionUserId(): Promise<string | null> {
   return verify(store.get(COOKIE)?.value);
 }
 
+const COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 60 * 60 * 24 * 90,
+};
+
 export async function startSession(userId: string): Promise<void> {
   const store = await cookies();
-  store.set(COOKIE, sign(userId), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 90,
-  });
+  store.set(COOKIE, sign(userId), COOKIE_OPTS);
+}
+
+/** The session cookie spec, for setting it directly on a response (e.g. a
+ *  redirect from the magic-link verify route, where relying on the ambient
+ *  cookie store is less reliable). */
+export function sessionCookie(userId: string) {
+  return { name: COOKIE, value: sign(userId), options: COOKIE_OPTS };
 }
 
 export async function endSession(): Promise<void> {

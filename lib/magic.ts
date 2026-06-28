@@ -1,26 +1,13 @@
 import crypto from "node:crypto";
 
-// Magic-link sign-in tokens. Single-use, short-lived, kept in memory (stashed on
-// globalThis so dev hot-reloads don't drop them). In production these would be
-// stored in the database and the link would be delivered by an email provider
-// (Resend/Postmark/SES); here we surface the link directly so the flow is fully
-// usable with zero external services.
+// Magic-link sign-in tokens — STATELESS and signed (HMAC over "email|expiry").
+// Because nothing is stored server-side, links survive deploys, restarts, and
+// multiple instances (the previous in-memory store broke on every redeploy).
+// Time-limited (15 min); not single-use, which is an acceptable tradeoff for a
+// passwordless email link. The signing key is the app's session secret.
 
 const TTL_MS = 15 * 60 * 1000; // 15 minutes
-
-interface PendingToken {
-  email: string;
-  expiresAt: number;
-}
-
-const g = globalThis as unknown as {
-  __jc_magic?: Map<string, PendingToken>;
-};
-
-function store(): Map<string, PendingToken> {
-  if (!g.__jc_magic) g.__jc_magic = new Map();
-  return g.__jc_magic;
-}
+const SECRET = process.env.JUSTCOFFEE_SESSION_SECRET || "dev-only-change-me";
 
 export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -30,19 +17,42 @@ export function normalizeEmail(raw: unknown): string | null {
   return email.slice(0, 200);
 }
 
-/** Issue a single-use token for an email and return it. */
-export function createToken(email: string): string {
-  const token = crypto.randomBytes(24).toString("base64url");
-  store().set(token, { email, expiresAt: Date.now() + TTL_MS });
-  return token;
+function hmac(payload: string): string {
+  return crypto.createHmac("sha256", SECRET).update(payload).digest("base64url");
 }
 
-/** Consume a token, returning the email it was issued for (or null if invalid). */
+/** Issue a signed, time-limited token for an email. No server-side state. */
+export function createToken(email: string): string {
+  const payload = Buffer.from(`${email}|${Date.now() + TTL_MS}`).toString(
+    "base64url",
+  );
+  return `${payload}.${hmac(payload)}`;
+}
+
+/** Validate a token, returning the email it was issued for (or null if invalid
+ *  or expired). Verifies the HMAC in constant time before trusting anything. */
 export function consumeToken(token: string): string | null {
-  const s = store();
-  const entry = s.get(token);
-  if (!entry) return null;
-  s.delete(token); // single use
-  if (Date.now() > entry.expiresAt) return null;
-  return entry.email;
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+
+  const expected = hmac(payload);
+  if (sig.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    return null;
+  }
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(payload, "base64url").toString("utf8");
+  } catch {
+    return null;
+  }
+  const sep = decoded.lastIndexOf("|");
+  if (sep < 0) return null;
+  const email = decoded.slice(0, sep);
+  const expiresAt = Number(decoded.slice(sep + 1));
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
+  return email;
 }

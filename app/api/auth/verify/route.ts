@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { consumeToken } from "@/lib/magic";
-import { startSession } from "@/lib/session";
+import { sessionCookie } from "@/lib/session";
 import { isProfileComplete } from "@/lib/actions";
 import * as db from "@/lib/db";
 import { getCity } from "@/lib/cities";
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   let user = await db.getUserByEmail(email);
   const isNew = !user;
   if (!user) {
-    const city = getCity("austin");
+    const city = getCity("champaign");
     const loc = jitter(city.lat, city.lng, 2.2);
     user = {
       id: db.id("user"),
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       iAm: "",
       lookingTo: "",
       avatar: { hue: Math.floor(Math.random() * 6), shape: Math.floor(Math.random() * 5) },
-      city: "austin",
+      city: "champaign",
       lat: loc.lat,
       lng: loc.lng,
       availability: "today",
@@ -62,9 +62,13 @@ export async function GET(req: Request) {
     await db.upsertUser(user);
   }
 
-  await startSession(user.id);
   identify(user.id, { city: user.city });
   track(user.id, isNew ? "signed_up" : "signed_in");
   const dest = isProfileComplete(user) ? "/find" : "/onboarding";
-  return NextResponse.redirect(new URL(dest, origin));
+
+  // Set the session cookie directly on the redirect so it's reliably applied.
+  const res = NextResponse.redirect(new URL(dest, origin));
+  const c = sessionCookie(user.id);
+  res.cookies.set(c.name, c.value, c.options);
+  return res;
 }
