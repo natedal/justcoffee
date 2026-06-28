@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import crypto from "node:crypto";
 import { currentUserId, unauthorized } from "@/lib/auth";
 import { selfView } from "@/lib/actions";
@@ -7,7 +5,7 @@ import * as db from "@/lib/db";
 import {
   ALLOWED_IMAGE_TYPES,
   MAX_UPLOAD_BYTES,
-  UPLOAD_DIR,
+  putPhoto,
 } from "@/lib/uploads";
 
 // POST /api/photo  (multipart form-data, field "photo")
@@ -41,16 +39,7 @@ export async function POST(req: Request) {
 
   const buf = Buffer.from(await file.arrayBuffer());
   const filename = `${uid}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
-  await fs.writeFile(path.join(UPLOAD_DIR, filename), buf);
-
-  // Remove the previous file (best-effort) so uploads don't pile up.
-  if (user.photoUrl) {
-    const old = user.photoUrl.split("/").pop();
-    if (old && old !== filename) {
-      fs.unlink(path.join(UPLOAD_DIR, old)).catch(() => {});
-    }
-  }
+  await putPhoto(filename, buf, file.type);
 
   user.photoUrl = `/api/photo/${filename}`;
   // A brand-new photo resets verification — you re-verify the current photo.
