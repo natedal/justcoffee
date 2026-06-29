@@ -17,6 +17,7 @@ import {
   getSupabase,
   readContacts,
   contactId,
+  marketFromEmail,
   unsubToken,
   emailHash,
   slug,
@@ -32,6 +33,8 @@ const market = slug(arg("market", ""));
 const forceMarket = arg("force-market", false) === true; // --market overrides the CSV column
 const bare = arg("bare", false) === true; // text-only + no List-Unsubscribe header (max Primary)
 const plainMode = arg("plain", false) === true || bare; // personal, minimal-HTML rendering
+const skipSent = arg("skip-sent", false) === true; // resume: skip contacts already emailed
+const marketFromDomain = arg("market-from-domain", false) === true; // derive market per email domain
 const csvPath = arg("csv");
 const doSend = arg("send", false) === true;
 const limit = Number(arg("limit", "0")) || 0;
@@ -72,17 +75,28 @@ if (!contacts.length) {
   process.exit(1);
 }
 
-const recipients = contacts.map((c) => {
-  const mk = forceMarket ? market : c.market || market;
-  const id = contactId(c.email, mk);
-  return {
-    ...c,
-    market: mk,
-    id,
-    cta: `${appUrl}/?v=${encodeURIComponent(variant)}&c=${encodeURIComponent(mk)}&ch=email&ct=${id}`,
-    unsub: `${appUrl}/api/growth/unsubscribe?ct=${id}&sig=${unsubToken(id)}`,
-  };
-});
+const recipients = contacts
+  .map((c) => {
+    const mk = marketFromDomain
+      ? marketFromEmail(c.email)
+      : forceMarket
+        ? market
+        : c.market || market;
+    return { c, mk };
+  })
+  // When tagging by domain, drop addresses we can't map to a campus (e.g. the
+  // foundation/admin address) rather than mis-tagging them.
+  .filter(({ mk }) => !marketFromDomain || mk)
+  .map(({ c, mk }) => {
+    const id = contactId(c.email, mk);
+    return {
+      ...c,
+      market: mk,
+      id,
+      cta: `${appUrl}/?v=${encodeURIComponent(variant)}&c=${encodeURIComponent(mk)}&ch=email&ct=${id}`,
+      unsub: `${appUrl}/api/growth/unsubscribe?ct=${id}&sig=${unsubToken(id)}`,
+    };
+  });
 
 // Honor the suppression list.
 const sb = getSupabase();
@@ -94,14 +108,29 @@ for (const part of chunk(recipients.map((r) => r.email), 500)) {
     .in("email", part);
   for (const r of data ?? []) suppressed.add(r.email);
 }
-const sendable = recipients.filter((r) => !suppressed.has(r.email));
+// Resume support: skip anyone already emailed, matched by hashed email so it
+// holds even when the market tag (and thus the contact id) changes between runs.
+const alreadySent = new Set();
+if (skipSent) {
+  const { data } = await sb
+    .from("growth_events")
+    .select("email_hash")
+    .eq("type", "sent")
+    .eq("channel", "email")
+    .not("email_hash", "is", null)
+    .limit(100000);
+  for (const r of data ?? []) alreadySent.add(r.email_hash);
+}
+const sendable = recipients.filter(
+  (r) => !suppressed.has(r.email) && !alreadySent.has(emailHash(r.email)),
+);
 
 // --- preview --------------------------------------------------------------
 console.log(`campaign:   variant=${variant}  market=${market || "(per-row)"}  channel=email`);
 console.log(`from:       ${from || "(CAMPAIGN_EMAIL_FROM unset)"}`);
 if (replyTo) console.log(`reply-to:   ${replyTo}`);
 console.log(
-  `recipients: ${recipients.length} in CSV · ${suppressed.size} unsubscribed · ${sendable.length} will send`,
+  `recipients: ${recipients.length} in CSV · ${suppressed.size} unsubscribed · ${alreadySent.size} already-sent · ${sendable.length} will send`,
 );
 const sample = sendable[0];
 if (sample) {

@@ -32,6 +32,8 @@ type EmailRow = {
   signups: number | string | null;
 };
 
+type TimeRow = { day: string; visits: number; signups: number; sent: number };
+
 const num = (x: unknown) => Number(x ?? 0);
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -59,10 +61,11 @@ export default async function GrowthDashboard({
   }
 
   const sb = supabase();
-  const [byVar, byCell, byEmail] = await Promise.all([
+  const [byVar, byCell, byEmail, byTime] = await Promise.all([
     sb.from("growth_funnel_by_variant").select("*"),
     sb.from("growth_funnel_by_variant_market").select("*"),
     sb.from("growth_email_funnel").select("*"),
+    sb.from("growth_timeseries").select("*"),
   ]);
 
   const variantRows: VariantRow[] = ((byVar.data ?? []) as RawRow[])
@@ -105,6 +108,15 @@ export default async function GrowthDashboard({
     .sort((a, b) => b.sent - a.sent || a.variant.localeCompare(b.variant));
   const hasEmail = emailRows.length > 0;
 
+  const timeRows: TimeRow[] = ((byTime.data ?? []) as Array<Record<string, unknown>>)
+    .map((r) => ({
+      day: String(r.day),
+      visits: num(r.visits),
+      signups: num(r.signups),
+      sent: num(r.sent),
+    }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+
   const ranked = rank(variantRows);
   const v = verdict(ranked);
   const best = ranked[0]?.rate ?? 0;
@@ -129,6 +141,8 @@ export default async function GrowthDashboard({
           </div>
 
           <Verdict v={v} />
+
+          {timeRows.length > 0 && <TimeSeries rows={timeRows} />}
 
           <Section title="By ad variant — ranked by signup rate">
             <table className="w-full text-sm">
@@ -367,6 +381,94 @@ function EmptyState({ appUrl }: { appUrl: string }) {
         .
       </p>
     </Card>
+  );
+}
+
+function TimeSeries({ rows }: { rows: TimeRow[] }) {
+  const W = 680;
+  const H = 150;
+  const padL = 26;
+  const padR = 14;
+  const padT = 14;
+  const iW = W - padL - padR;
+  const iH = H - padT - 22;
+  const maxY = Math.max(1, ...rows.map((r) => Math.max(r.visits, r.signups)));
+  const n = rows.length;
+  const xAt = (i: number) => padL + (n === 1 ? iW / 2 : (i / (n - 1)) * iW);
+  const yAt = (val: number) => padT + iH - (val / maxY) * iH;
+  const pts = (key: "visits" | "signups") =>
+    rows.map((r, i) => `${xAt(i).toFixed(1)},${yAt(r[key]).toFixed(1)}`).join(" ");
+  const fmtDay = (d: string) => {
+    const p = d.split("-");
+    return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : d;
+  };
+
+  return (
+    <Section title="Over time — clicks & signups per day">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        role="img"
+        aria-label="Daily visits and signups"
+      >
+        <line x1={padL} y1={padT + iH} x2={W - padR} y2={padT + iH} stroke="#e2e8f0" />
+        <text x={2} y={padT + 4} fontSize="9" fill="#94a3b8">
+          {maxY}
+        </text>
+        <text x={2} y={padT + iH} fontSize="9" fill="#94a3b8">
+          0
+        </text>
+        <polyline points={pts("visits")} fill="none" stroke="#10b981" strokeWidth="2" />
+        <polyline points={pts("signups")} fill="none" stroke="#6366f1" strokeWidth="2" />
+        {rows.map((r, i) => (
+          <g key={r.day}>
+            <circle cx={xAt(i)} cy={yAt(r.visits)} r="2.5" fill="#10b981" />
+            <circle cx={xAt(i)} cy={yAt(r.signups)} r="2.5" fill="#6366f1" />
+            {(n <= 8 || i === 0 || i === n - 1) && (
+              <text x={xAt(i)} y={H - 6} fontSize="9" fill="#94a3b8" textAnchor="middle">
+                {fmtDay(r.day)}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div className="mt-1 flex gap-4 text-xs text-slate-500">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#10b981" }} />{" "}
+          visits (clicks)
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#6366f1" }} />{" "}
+          signups
+        </span>
+      </div>
+      <table className="mt-3 w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-slate-500">
+            <th className="py-1.5 pr-3 font-medium">Day (UTC)</th>
+            <th className="py-1.5 pr-3 text-right font-medium">Sent</th>
+            <th className="py-1.5 pr-3 text-right font-medium">Visits</th>
+            <th className="py-1.5 pl-3 text-right font-medium">Signups</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...rows].reverse().map((r) => (
+            <tr key={r.day} className="border-b border-slate-100">
+              <td className="py-1.5 pr-3 text-slate-700">{r.day}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500">
+                {r.sent || ""}
+              </td>
+              <td className="py-1.5 pr-3 text-right tabular-nums">{r.visits}</td>
+              <td className="py-1.5 pl-3 text-right tabular-nums font-semibold">{r.signups}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-slate-400">
+        Visits include automated link-scanners (the send-day spike is mostly bots) — the
+        signups line is the human signal.
+      </p>
+    </Section>
   );
 }
 

@@ -72,6 +72,7 @@ export const VARIANTS = {
 // links + the dashboard); the label is what recipients actually read in the copy.
 export const MARKET_LABELS = {
   uic: "UIC",
+  uis: "UIS",
   "u-illinois": "the University of Illinois",
   uiuc: "UIUC",
   "ut-austin": "UT Austin",

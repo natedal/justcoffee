@@ -44,6 +44,19 @@ export function contactId(email, market) {
   return "c-" + h;
 }
 
+// Map an email domain to a campus/market slug. Add rows as you target new schools.
+export const DOMAIN_MARKET = {
+  "uic.edu": "uic",
+  "illinois.edu": "uiuc",
+  "uis.edu": "uis",
+};
+
+/** Derive a market slug from an email's domain; "" when unknown (caller can skip). */
+export function marketFromEmail(email) {
+  const domain = String(email).split("@")[1]?.trim().toLowerCase() || "";
+  return DOMAIN_MARKET[domain] || "";
+}
+
 /** Must match verifyUnsubToken() in lib/growth.ts. */
 export function unsubToken(id) {
   return createHmac("sha256", SECRET())

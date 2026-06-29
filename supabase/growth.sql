@@ -91,3 +91,14 @@ select
 from growth_events
 where channel = 'email'
 group by variant, market;
+
+-- Daily time-series (UTC) for the dashboard chart: clicks (visits) + signups + sent.
+create or replace view growth_timeseries as
+select
+  (to_timestamp(at / 1000) at time zone 'UTC')::date as day,
+  count(distinct anon_id)    filter (where type = 'visit')  as visits,
+  count(distinct email_hash) filter (where type = 'signup') as signups,
+  count(distinct contact_id) filter (where type = 'sent')   as sent
+from growth_events
+group by 1
+order by 1;
