@@ -27,3 +27,7 @@ yarn-error.log*
 # env
 .env
 .env*.local
+
+# growth contact lists — may contain PII, never commit (the template is kept)
+/lists/*.csv
+!/lists/example.csv

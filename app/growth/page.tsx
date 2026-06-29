@@ -20,6 +20,18 @@ type RawRow = {
   activations: number | string | null;
 };
 
+type EmailRow = {
+  variant: string | null;
+  market: string | null;
+  sent: number | string | null;
+  delivered: number | string | null;
+  bounced: number | string | null;
+  complained: number | string | null;
+  unsubscribed: number | string | null;
+  site_visits: number | string | null;
+  signups: number | string | null;
+};
+
 const num = (x: unknown) => Number(x ?? 0);
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -47,9 +59,10 @@ export default async function GrowthDashboard({
   }
 
   const sb = supabase();
-  const [byVar, byCell] = await Promise.all([
+  const [byVar, byCell, byEmail] = await Promise.all([
     sb.from("growth_funnel_by_variant").select("*"),
     sb.from("growth_funnel_by_variant_market").select("*"),
+    sb.from("growth_email_funnel").select("*"),
   ]);
 
   const variantRows: VariantRow[] = ((byVar.data ?? []) as RawRow[])
@@ -75,6 +88,22 @@ export default async function GrowthDashboard({
         a.market.localeCompare(b.market) ||
         b.visits - a.visits,
     );
+
+  const emailRows = ((byEmail.data ?? []) as EmailRow[])
+    .map((r) => ({
+      variant: r.variant || "(untagged)",
+      market: r.market || "(none)",
+      sent: num(r.sent),
+      delivered: num(r.delivered),
+      bounced: num(r.bounced),
+      complained: num(r.complained),
+      unsubscribed: num(r.unsubscribed),
+      siteVisits: num(r.site_visits),
+      signups: num(r.signups),
+    }))
+    .filter((r) => r.sent + r.delivered + r.bounced > 0)
+    .sort((a, b) => b.sent - a.sent || a.variant.localeCompare(b.variant));
+  const hasEmail = emailRows.length > 0;
 
   const ranked = rank(variantRows);
   const v = verdict(ranked);
@@ -174,9 +203,11 @@ export default async function GrowthDashboard({
             </p>
           </Section>
         </>
-      ) : (
+      ) : hasEmail ? null : (
         <EmptyState appUrl={appUrl} />
       )}
+
+      {hasEmail && <EmailFunnel rows={emailRows} />}
 
       <LinkRecipe appUrl={appUrl} />
       <Methodology />
@@ -336,6 +367,86 @@ function EmptyState({ appUrl }: { appUrl: string }) {
         .
       </p>
     </Card>
+  );
+}
+
+type EmailFunnelRow = {
+  variant: string;
+  market: string;
+  sent: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  unsubscribed: number;
+  siteVisits: number;
+  signups: number;
+};
+
+function EmailFunnel({ rows }: { rows: EmailFunnelRow[] }) {
+  const tot = rows.reduce(
+    (a, r) => ({
+      sent: a.sent + r.sent,
+      delivered: a.delivered + r.delivered,
+      bounced: a.bounced + r.bounced,
+      complained: a.complained + r.complained,
+      unsubscribed: a.unsubscribed + r.unsubscribed,
+      siteVisits: a.siteVisits + r.siteVisits,
+      signups: a.signups + r.signups,
+    }),
+    { sent: 0, delivered: 0, bounced: 0, complained: 0, unsubscribed: 0, siteVisits: 0, signups: 0 },
+  );
+  const rate = (a: number, b: number) =>
+    b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—";
+  return (
+    <Section title="Email channel — deliverability & outcomes">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-slate-500">
+            <th className="py-2 pr-3 font-medium">Ad</th>
+            <th className="py-2 pr-3 font-medium">Market</th>
+            <th className="py-2 pr-3 text-right font-medium">Sent</th>
+            <th className="py-2 pr-3 text-right font-medium">Delivered</th>
+            <th className="py-2 pr-3 text-right font-medium">Bounced</th>
+            <th className="py-2 pr-3 text-right font-medium">Spam</th>
+            <th className="py-2 pr-3 text-right font-medium">Unsub</th>
+            <th className="py-2 pr-3 text-right font-medium">Clicked→site</th>
+            <th className="py-2 pl-3 text-right font-medium">Signups</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={`${r.variant}~${r.market}`}
+              className="border-b border-slate-100"
+            >
+              <td className="py-2 pr-3 font-medium text-slate-800">{r.variant}</td>
+              <td className="py-2 pr-3 text-slate-600">{r.market}</td>
+              <td className="py-2 pr-3 text-right tabular-nums">{r.sent}</td>
+              <td className="py-2 pr-3 text-right tabular-nums">{r.delivered}</td>
+              <td className="py-2 pr-3 text-right tabular-nums text-amber-700">
+                {r.bounced || ""}
+              </td>
+              <td className="py-2 pr-3 text-right tabular-nums text-rose-700">
+                {r.complained || ""}
+              </td>
+              <td className="py-2 pr-3 text-right tabular-nums text-slate-500">
+                {r.unsubscribed || ""}
+              </td>
+              <td className="py-2 pr-3 text-right tabular-nums">{r.siteVisits}</td>
+              <td className="py-2 pl-3 text-right tabular-nums font-semibold">
+                {r.signups}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-slate-400">
+        Deliverability for the email channel. “Clicked→site” counts unique people
+        who actually landed on the site from an email (first-party). Watch bounces
+        and spam — high rates hurt your sending reputation. Delivered rate:{" "}
+        {rate(tot.delivered, tot.sent)}.
+      </p>
+    </Section>
   );
 }
 

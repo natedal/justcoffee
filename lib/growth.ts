@@ -22,6 +22,29 @@ export function emailHash(email: string): string {
     .digest("hex");
 }
 
+/** Signed, un-guessable token for one-click unsubscribe links, so bots can't
+ *  opt out arbitrary contacts by enumerating ids. */
+export function unsubToken(contactId: string): string {
+  const secret = process.env.JUSTCOFFEE_SESSION_SECRET || "jc-growth-fallback";
+  return crypto
+    .createHmac("sha256", secret)
+    .update("unsub:" + contactId)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+export function verifyUnsubToken(contactId: string, sig: string): boolean {
+  if (!sig) return false;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(unsubToken(contactId)),
+      Buffer.from(sig),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function readCookie(
   header: string | null | undefined,
   name: string,
