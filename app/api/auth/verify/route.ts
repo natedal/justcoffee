@@ -62,6 +62,10 @@ export async function GET(req: Request) {
     await db.upsertUser(user);
   }
 
+  // Mark the captured signup as verified (and link the user id). Safe if no
+  // signups row exists yet — it will insert one.
+  await db.markSignupVerified(email, user.id);
+
   identify(user.id, { city: user.city });
   track(user.id, isNew ? "signed_up" : "signed_in");
   const dest = isProfileComplete(user) ? "/find" : "/onboarding";

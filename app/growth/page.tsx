@@ -34,6 +34,15 @@ type EmailRow = {
 
 type TimeRow = { day: string; visits: number; signups: number; sent: number };
 
+type SignupListRow = {
+  email: string | null;
+  verified: boolean | null;
+  variant: string | null;
+  market: string | null;
+  channel: string | null;
+  first_seen: number | string | null;
+};
+
 const num = (x: unknown) => Number(x ?? 0);
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -61,11 +70,12 @@ export default async function GrowthDashboard({
   }
 
   const sb = supabase();
-  const [byVar, byCell, byEmail, byTime] = await Promise.all([
+  const [byVar, byCell, byEmail, byTime, bySignup] = await Promise.all([
     sb.from("growth_funnel_by_variant").select("*"),
     sb.from("growth_funnel_by_variant_market").select("*"),
     sb.from("growth_email_funnel").select("*"),
     sb.from("growth_timeseries").select("*"),
+    sb.from("signups").select("*").order("first_seen", { ascending: false }),
   ]);
 
   const variantRows: VariantRow[] = ((byVar.data ?? []) as RawRow[])
@@ -117,6 +127,14 @@ export default async function GrowthDashboard({
     }))
     .sort((a, b) => a.day.localeCompare(b.day));
 
+  const signupRows = ((bySignup.data ?? []) as SignupListRow[]).map((r) => ({
+    email: r.email ?? "",
+    verified: Boolean(r.verified),
+    source: [r.variant, r.market, r.channel].filter(Boolean).join(" · "),
+    firstSeen: num(r.first_seen),
+  }));
+  const hasSignups = signupRows.length > 0;
+
   const ranked = rank(variantRows);
   const v = verdict(ranked);
   const best = ranked[0]?.rate ?? 0;
@@ -132,6 +150,7 @@ export default async function GrowthDashboard({
 
   return (
     <Shell tokenSet={Boolean(token)}>
+      {hasSignups && <SignupList rows={signupRows} />}
       {hasData ? (
         <>
           <div className="grid grid-cols-3 gap-3">
@@ -217,7 +236,7 @@ export default async function GrowthDashboard({
             </p>
           </Section>
         </>
-      ) : hasEmail ? null : (
+      ) : hasEmail || hasSignups ? null : (
         <EmptyState appUrl={appUrl} />
       )}
 
@@ -381,6 +400,77 @@ function EmptyState({ appUrl }: { appUrl: string }) {
         .
       </p>
     </Card>
+  );
+}
+
+function SignupList({
+  rows,
+}: {
+  rows: Array<{
+    email: string;
+    verified: boolean;
+    source: string;
+    firstSeen: number;
+  }>;
+}) {
+  const verifiedCount = rows.filter((r) => r.verified).length;
+  const fmt = (ms: number) =>
+    ms > 0
+      ? new Date(ms).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone: "UTC",
+        })
+      : "—";
+  return (
+    <Section title="Signups — email list">
+      <p className="mb-3 text-sm text-slate-500">
+        <strong className="text-slate-800">{rows.length.toLocaleString()}</strong>{" "}
+        {rows.length === 1 ? "email" : "emails"} captured ·{" "}
+        {verifiedCount.toLocaleString()} verified (clicked their link)
+      </p>
+      <div className="max-h-96 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-white">
+            <tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-2 pr-3 font-medium">Email</th>
+              <th className="py-2 pr-3 font-medium">First seen (UTC)</th>
+              <th className="py-2 pr-3 font-medium">Source</th>
+              <th className="py-2 pl-3 text-right font-medium">Verified</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.email} className="border-b border-slate-100">
+                <td className="break-all py-2 pr-3 font-medium text-slate-800">
+                  {r.email}
+                </td>
+                <td className="py-2 pr-3 tabular-nums text-slate-600">
+                  {fmt(r.firstSeen)}
+                </td>
+                <td className="py-2 pr-3 text-slate-500">{r.source || "—"}</td>
+                <td className="py-2 pl-3 text-right">
+                  {r.verified ? (
+                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      ✓ yes
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-400">pending</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-slate-400">
+        Every address entered at sign-in is captured here — &ldquo;pending&rdquo;
+        means they requested a link but haven&apos;t clicked it yet. Visible only
+        behind the dashboard token.
+      </p>
+    </Section>
   );
 }
 
@@ -597,8 +687,10 @@ function Methodology() {
         </li>
         <li>
           <strong>Visits</strong> are unique ad clicks (de-duped by a first-party
-          cookie). <strong>Signups</strong> are unique emails (de-duped by a
-          privacy-safe hash — no raw emails are stored).
+          cookie). <strong>Signups</strong> in the A/B tables are unique emails
+          de-duped by a privacy-safe hash. The raw addresses themselves live in
+          the &ldquo;Signups — email list&rdquo; section above, shown only behind
+          the dashboard token.
         </li>
         <li>
           <strong>Don&apos;t call a winner early.</strong> The verdict only

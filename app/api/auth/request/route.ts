@@ -1,5 +1,6 @@
 import { createToken, normalizeEmail } from "@/lib/magic";
 import { attrFromCookieHeader, anonFromCookieHeader, logEvent } from "@/lib/growth";
+import { recordSignupEmail } from "@/lib/db";
 
 // POST /api/auth/request  { email }
 // Issues a magic-link token and either emails it (when RESEND_API_KEY is set)
@@ -21,12 +22,16 @@ export async function POST(req: Request) {
   // internally so it can never break the sign-in flow.
   {
     const cookie = req.headers.get("cookie");
+    const attr = attrFromCookieHeader(cookie);
     await logEvent({
       type: "signup",
-      attr: attrFromCookieHeader(cookie),
+      attr,
       anonId: anonFromCookieHeader(cookie),
       email,
     });
+    // Persist the raw email (unlike the hash-only growth event) so it shows up
+    // in the /growth signups list even if they never click the magic link.
+    await recordSignupEmail(email, attr);
   }
 
   // Derive the base URL from the incoming request so the link always points

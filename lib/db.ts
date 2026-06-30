@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { supabase } from "./supabase";
 import { buildSeedUsers } from "./seed";
+import type { Attribution } from "./growth-shared";
 
 // Supabase-backed store. Every call site uses the helpers below, not the storage
 // mechanism. Coffee spots live in application code (lib/cities.ts), so there is
@@ -315,6 +316,131 @@ export async function blockedPairIds(userId: string): Promise<Set<string>> {
     if (b.target_id === userId) out.add(b.from_id);
   }
   return out;
+}
+
+// --- Signups (raw email capture for the /growth list) --------------------
+// Captures the raw email the moment it's submitted at /signin. Deliberately
+// separate from two existing stores: the growth_events spine keeps only an HMAC
+// hash (privacy-by-design), and the `users` table only gets a row once the magic
+// link is clicked. We also keep this OUT of `users` on purpose — allUsers() feeds
+// the matcher, so empty stubs on every email submission would pollute matches.
+
+export interface SignupRow {
+  email: string;
+  userId?: string;
+  verified: boolean;
+  variant: string;
+  market: string;
+  channel: string;
+  requests: number;
+  firstSeen: number;
+  lastSeen: number;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function rowToSignup(r: any): SignupRow {
+  return {
+    email: r.email,
+    userId: r.user_id ?? undefined,
+    verified: Boolean(r.verified),
+    variant: r.variant ?? "",
+    market: r.market ?? "",
+    channel: r.channel ?? "",
+    requests: Number(r.requests ?? 1),
+    firstSeen: Number(r.first_seen),
+    lastSeen: Number(r.last_seen),
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/** Record (or bump) a raw email submitted at sign-in. Fire-and-forget: never
+ *  throws, so a capture failure can't break the sign-in flow. */
+export async function recordSignupEmail(
+  rawEmail: string,
+  attr?: Attribution | null,
+): Promise<void> {
+  try {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email) return;
+    const sb = supabase();
+    const now = Date.now();
+    const { data } = await sb
+      .from("signups")
+      .select("requests, variant, market, channel")
+      .eq("email", email)
+      .maybeSingle();
+    if (data) {
+      await sb
+        .from("signups")
+        .update({
+          last_seen: now,
+          requests: Number(data.requests ?? 1) + 1,
+          // backfill attribution only if it wasn't captured before
+          variant: data.variant || attr?.v || "",
+          market: data.market || attr?.c || "",
+          channel: data.channel || attr?.ch || "",
+        })
+        .eq("email", email);
+    } else {
+      await sb.from("signups").insert({
+        email,
+        verified: false,
+        variant: attr?.v ?? "",
+        market: attr?.c ?? "",
+        channel: attr?.ch ?? "",
+        requests: 1,
+        first_seen: now,
+        last_seen: now,
+      });
+    }
+  } catch {
+    /* email capture must never break sign-in */
+  }
+}
+
+/** Mark a captured signup as verified (magic link clicked) and link the user id.
+ *  Inserts a row if one doesn't exist yet (covers users created before capture). */
+export async function markSignupVerified(
+  rawEmail: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email) return;
+    const sb = supabase();
+    const now = Date.now();
+    const { data } = await sb
+      .from("signups")
+      .select("email")
+      .eq("email", email)
+      .maybeSingle();
+    if (data) {
+      await sb
+        .from("signups")
+        .update({ verified: true, user_id: userId, last_seen: now })
+        .eq("email", email);
+    } else {
+      await sb.from("signups").insert({
+        email,
+        user_id: userId,
+        verified: true,
+        requests: 1,
+        first_seen: now,
+        last_seen: now,
+      });
+    }
+  } catch {
+    /* never break verify */
+  }
+}
+
+/** Every captured signup email, newest first — for the /growth dashboard. */
+export async function listSignups(): Promise<SignupRow[]> {
+  const { data } = await supabase()
+    .from("signups")
+    .select("*")
+    .order("first_seen", { ascending: false });
+  return (data ?? []).map(rowToSignup);
 }
 
 // --- Admin / metrics -----------------------------------------------------

@@ -29,6 +29,34 @@ create index if not exists growth_events_at_idx   on growth_events (at);
 create index if not exists growth_events_anon_idx on growth_events (anon_id);
 alter table growth_events enable row level security;
 
+-- ── Signups (raw email capture) ──────────────────────────────────────────────
+-- Unlike growth_events (hash-only) this stores the RAW email submitted at
+-- /signin, so the /growth dashboard can show the actual address list. Captured
+-- on email submit (verified=false) and flipped to verified when the magic link
+-- is clicked. Kept out of `users` on purpose: allUsers() feeds the matcher, so
+-- stub rows there would pollute matches. Service-role only (RLS, no policies).
+-- Applied live via migration "signup_email_capture".
+create table if not exists signups (
+  email      text primary key,
+  user_id    text,
+  verified   boolean not null default false,
+  variant    text not null default '',
+  market     text not null default '',
+  channel    text not null default '',
+  requests   integer not null default 1,
+  first_seen bigint not null,
+  last_seen  bigint not null
+);
+create index if not exists signups_first_seen_idx on signups (first_seen);
+alter table signups enable row level security;
+
+-- One-time backfill of already-collected (verified) emails from the users table:
+insert into signups (email, user_id, verified, first_seen, last_seen)
+select email, id, true, created_at, created_at
+from users
+where is_demo = false and email is not null
+on conflict (email) do nothing;
+
 -- Pre-aggregated funnel views so the dashboard reads one row per cell (no client
 -- 1000-row cap), and so you can inspect results directly in the SQL editor.
 -- Unique counts: visitors by anon cookie, signups by HMAC email hash, activations
